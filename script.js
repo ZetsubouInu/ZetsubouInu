@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getFirestore, doc, setDoc, onSnapshot, updateDoc, arrayUnion, getDoc, deleteDoc, Timestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, onSnapshot, updateDoc, arrayUnion, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { odaiList } from "./odai.js";
 
 const firebaseConfig = {
@@ -41,25 +41,21 @@ function pickUniqueOdai(usedIndices) {
 
 document.addEventListener("DOMContentLoaded", () => {
     const iconContainer = document.getElementById('home-icon-selector');
-    if (iconContainer) {
-        icons.forEach((icon, index) => {
-            const div = document.createElement('div');
-            div.className = `icon-option ${index === 0 ? 'selected' : ''}`;
-            div.innerText = icon;
-            div.onclick = () => { myIcon = icon; document.querySelectorAll('.icon-option').forEach(opt => opt.classList.remove('selected')); div.classList.add('selected'); };
-            iconContainer.appendChild(div);
-        });
-    }
+    icons.forEach((icon, index) => {
+        const div = document.createElement('div');
+        div.className = `icon-option ${index === 0 ? 'selected' : ''}`;
+        div.innerText = icon;
+        div.onclick = () => { myIcon = icon; document.querySelectorAll('.icon-option').forEach(opt => opt.classList.remove('selected')); div.classList.add('selected'); };
+        iconContainer.appendChild(div);
+    });
 
     const roundSelect = document.getElementById("round-select");
-    if (roundSelect) {
-        for(let i=1; i<=10; i++) {
-            let opt = document.createElement("option"); opt.value = i; opt.innerText = `${i}問`;
-            if(i === 3) opt.selected = true;
-            roundSelect.appendChild(opt);
-        }
-        roundSelect.onchange = (e) => updateRoomSettings('totalRounds', e.target.value);
+    for(let i=1; i<=10; i++) {
+        let opt = document.createElement("option"); opt.value = i; opt.innerText = `${i}問`;
+        if(i === 3) opt.selected = true;
+        roundSelect.appendChild(opt);
     }
+    roundSelect.onchange = (e) => updateRoomSettings('totalRounds', e.target.value);
 
     const playingStamps = ['W', '草', '！？', '難しい...', 'よゆー！'];
     const revealingStamps = ['W', '草', '！？', 'うまい！', '8888'];
@@ -67,13 +63,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const setupStamps = (containerId, list) => {
         const container = document.getElementById(containerId);
-        if (container) {
-            container.innerHTML = ""; // 重複防止
-            list.forEach(type => {
-                const btn = document.createElement('button'); btn.className = 'stamp-btn'; btn.innerText = type;
-                btn.onclick = () => sendStamp(type); container.appendChild(btn);
-            });
-        }
+        list.forEach(type => {
+            const btn = document.createElement('button'); btn.className = 'stamp-btn'; btn.innerText = type;
+            btn.onclick = () => sendStamp(type); container.appendChild(btn);
+        });
     };
 
     setupStamps('playing-stamps', playingStamps);
@@ -100,15 +93,10 @@ async function createRoom() {
     roomCode = Math.floor(10000 + Math.random() * 90000).toString();
     myName = document.getElementById("name-input").value.substring(0, 10) || "名無し";
     myId = generateId(); isHost = true; currentLocalScreen = "wait";
-    
-    const expireDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    
     await setDoc(doc(db, "rooms", roomCode), {
-        status: "waiting", 
-        users: [{ id: myId, name: myName, icon: myIcon, isReady: false, lastReaction: "", reactionTime: 0, totalScore: 0, isExited: false }], 
+        status: "waiting", users: [{ id: myId, name: myName, icon: myIcon, isReady: false, lastReaction: "", reactionTime: 0, totalScore: 0, isExited: false }], 
         hostId: myId, originalHostId: myId, odai: "", usedOdaiIndices: [], answers: [], revealIndex: 0, timeLeft: 60, voteCount: 0,
-        currentRound: 0, totalRounds: 3, maxUsers: 8, timeLimit: 60, allAnswersHistory: [],
-        expireAt: Timestamp.fromDate(expireDate)
+        currentRound: 0, totalRounds: 3, maxUsers: 8, timeLimit: 60, allAnswersHistory: []
     });
     setupRoomListener();
 }
@@ -150,6 +138,9 @@ function updateUI(data) {
     
     if (currentLocalScreen !== "home") {
         bottomBar.style.display = "flex";
+        
+        // 【重要】ユーザー数が変わったときのみHTMLを再構築。
+        // これをしないとリアクションのアニメーション中に要素が消えてしまいます。
         const currentIconCount = bottomBar.querySelectorAll('.user-icon-stack').length;
         if (currentIconCount !== activeUsers.length) {
             bottomBar.innerHTML = activeUsers.map(u => `
@@ -161,13 +152,14 @@ function updateUI(data) {
             `).join("");
         }
 
+        // 吹き出し（リアクション）の処理
         data.users.forEach(u => {
             const bubble = document.getElementById(`bubble-${u.id}`);
             if (bubble && u.reactionTime && u.reactionTime !== lastKnownReactionTimes[u.id]) {
                 lastKnownReactionTimes[u.id] = u.reactionTime;
                 bubble.innerText = u.lastReaction;
                 bubble.classList.remove("show");
-                void bubble.offsetWidth; 
+                void bubble.offsetWidth; // リフローを強制してアニメーションをリセット
                 bubble.classList.add("show");
             }
         });
@@ -229,54 +221,29 @@ function updateUI(data) {
 
 async function updateRoomSettings(field, val) { if (!isHost) return; const update = {}; update[field] = parseInt(val); await updateDoc(doc(db, "rooms", roomCode), update); }
 async function toggleReady() { const newUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, isReady: !u.isReady } : u); await updateDoc(doc(db, "rooms", roomCode), { users: newUsers }); }
-
 async function startGame() {
     if (!isHost) return;
     const participants = latestRoomData.users.filter(u => !u.isExited).map(u => ({ ...u, isReady: false, totalScore: 0 }));
     const nextOdai = pickUniqueOdai([]);
-    
     await updateDoc(doc(db, "rooms", roomCode), {
-        status: "playing", 
-        users: participants, 
-        currentRound: 1, 
-        answers: [], 
-        revealIndex: 0, 
-        timeLeft: latestRoomData.timeLimit || 60, 
-        voteCount: 0,
-        odai: nextOdai.text, 
-        usedOdaiIndices: nextOdai.newUsedIndices, // 修正済み
-        allAnswersHistory: []
+        status: "playing", users: participants, currentRound: 1, answers: [], revealIndex: 0, timeLeft: latestRoomData.timeLimit, voteCount: 0,
+        odai: nextOdai.text, usedOdaiIndices: nextOdai.newUsedIndices, allAnswersHistory: []
     });
-    startTimer(latestRoomData.timeLimit || 60);
+    startTimer(latestRoomData.timeLimit);
 }
-
 function startTimer(duration) {
     if (timerInterval) clearInterval(timerInterval);
     let time = duration;
-    timerInterval = setInterval(() => {
-        time--;
-        if (isHost) updateDoc(doc(db, "rooms", roomCode), { timeLeft: time });
-        if (time <= 0) { clearInterval(timerInterval); if (isHost) goToReveal(); }
-    }, 1000);
+    timerInterval = setInterval(() => { time--; if (isHost) updateDoc(doc(db, "rooms", roomCode), { timeLeft: time }); if (time <= 0) { clearInterval(timerInterval); if (isHost) goToReveal(); } }, 1000);
 }
-
 async function submitAnswer() {
     const text = document.getElementById("my-answer").value; if(!text || isProcessingAction) return;
     isProcessingAction = true; document.getElementById("submit-btn").disabled = true;
     await updateDoc(doc(db, "rooms", roomCode), { answers: arrayUnion({ userId: myId, userName: myName, text: text, votes: 0, reactions: 0 }) });
     document.getElementById("my-answer").value = "";
 }
-
-async function goToReveal() { 
-    if (timerInterval) clearInterval(timerInterval); 
-    if (!isHost) return; 
-    const currentAnswers = latestRoomData.answers || []; 
-    if (currentAnswers.length === 0) processVoteEnd(latestRoomData); 
-    else await updateDoc(doc(db, "rooms", roomCode), { status: "revealing", revealIndex: 0 }); 
-}
-
+async function goToReveal() { if (timerInterval) clearInterval(timerInterval); if (!isHost) return; const currentAnswers = latestRoomData.answers || []; if (currentAnswers.length === 0) processVoteEnd(latestRoomData); else await updateDoc(doc(db, "rooms", roomCode), { status: "revealing", revealIndex: 0 }); }
 async function nextReveal() { await updateDoc(doc(db, "rooms", roomCode), { revealIndex: latestRoomData.revealIndex + 1 }); }
-
 function renderVoteList(data) {
     const list = document.getElementById("vote-list"); list.innerHTML = ""; const activeUsers = data.users.filter(u => !u.isExited);
     const others = data.answers.filter(a => a.userId !== myId && activeUsers.some(u => u.id === a.userId));
@@ -288,7 +255,6 @@ function renderVoteList(data) {
         list.appendChild(btn);
     });
 }
-
 function renderFinalResults(data) {
     const list = document.getElementById("result-list"); const sorted = [...data.users].sort((a,b) => (b.totalScore || 0) - (a.totalScore || 0));
     list.innerHTML = sorted.map((u, i) => `<div class="result-item"><strong>${i+1}位 (${u.totalScore || 0}pt):</strong> ${renderIcon(u.icon)} ${escapeHTML(u.name.substring(0, 10))}${u.id === myId ? ' (あなた)' : ''} ${u.isExited ? '<small>(退出済)</small>' : ''}</div>`).join("");
@@ -304,7 +270,6 @@ function renderFinalResults(data) {
         } else document.getElementById("mvp-area").style.display = "none";
     } else document.getElementById("mvp-area").style.display = "none";
 }
-
 async function processVoteEnd(data) {
     if (!isHost) return;
     const updatedUsers = data.users.map(u => { const ans = data.answers.find(a => a.userId === u.id); return { ...u, totalScore: (u.totalScore || 0) + (ans ? ans.votes : 0) }; });
@@ -315,32 +280,13 @@ async function processVoteEnd(data) {
         startTimer(data.timeLimit);
     } else await updateDoc(doc(db, "rooms", roomCode), { status: "result", users: updatedUsers, allAnswersHistory: updatedHistory });
 }
-
 function shareToX() {
     const mvpAnswer = document.getElementById("mvp-answer").innerText, mvpOdai = document.getElementById("mvp-odai").innerText;
     let shareText = `【with!大喜利】結果発表！\n`; if (mvpAnswer && mvpAnswer !== "...") shareText += `🏆今回のMVP回答：${mvpAnswer}\n（${mvpOdai}）\n\n`;
     shareText += `#with大喜利\n`; const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent("https://zetsubouinu.github.io/ZetsubouInu/")}`; window.open(xUrl, '_blank');
 }
-
-async function goBackToWait() { 
-    currentLocalScreen = "wait"; 
-    const updated = latestRoomData.users.map(u => u.id === myId ? {...u, isReady: false, isExited: false} : u); 
-    await updateDoc(doc(db, "rooms", roomCode), { users: updated, status: "waiting" }); 
-}
-
-async function exitGame() {
-    if (latestRoomData && roomCode) {
-        const updatedUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, isExited: true, isReady: false } : u);
-        const remainingUsers = updatedUsers.filter(u => !u.isExited);
-        if (remainingUsers.length === 0) {
-            await deleteDoc(doc(db, "rooms", roomCode));
-        } else {
-            await updateDoc(doc(db, "rooms", roomCode), { users: updatedUsers });
-        }
-    }
-    location.reload(); 
-}
-
+async function goBackToWait() { currentLocalScreen = "wait"; const updated = latestRoomData.users.map(u => u.id === myId ? {...u, isReady: false, isExited: false} : u); await updateDoc(doc(db, "rooms", roomCode), { users: updated, status: "waiting" }); }
+async function exitGame() { if (latestRoomData) { const updatedUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, isExited: true, isReady: false } : u); await updateDoc(doc(db, "rooms", roomCode), { users: updatedUsers }); } location.reload(); }
 async function sendStamp(type) {
     const newUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, lastReaction: type, reactionTime: Date.now() } : u); const updateFields = { users: newUsers };
     if (latestRoomData.status === "revealing") {
@@ -352,6 +298,5 @@ async function sendStamp(type) {
     }
     await updateDoc(doc(db, "rooms", roomCode), updateFields);
 }
-
 function copyRoomCode() { if (!roomCode) return; navigator.clipboard.writeText(roomCode).then(() => { const toast = document.getElementById("copy-toast"); toast.className = "show"; setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 2000); }); }
 function toggleRoomCode() { const display = document.getElementById("display-code"); display.innerText = (display.innerText === "*****") ? roomCode : "*****"; display.style.background = (display.innerText === "*****") ? "#eee" : "transparent"; }
