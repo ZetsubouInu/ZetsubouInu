@@ -5,17 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>with!大喜利</title>
 
+    <link rel="icon" href="favicon.png" type="image/png">
+
     <meta property="og:title" content="with!大喜利">
     <meta property="og:type" content="website">
     <meta property="og:description" content="友だちとボケて笑い合おう！完全無料のオンライン大喜利ゲーム！">
-    <meta property="og:url" content="https://with-oogiri.web.app/">
-    <meta property="og:image" content="https://ZetsubouInu.github.io/ZetsubouInu/OGP.png">
+    <meta property="og:url" content="https://zetsubouinu.github.io/ZetsubouInu/">
+    <meta property="og:image" content="https://zetsubouinu.github.io/ZetsubouInu/OGP.png">
     <meta property="og:site_name" content="with!大喜利">
     
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="with!大喜利">
     <meta name="twitter:description" content="友だちとボケて笑い合おう！完全無料のオンライン大喜利ゲーム！">
-    <meta name="twitter:image" content="https://ZetsubouInu.github.io/ZetsubouInu/OGP.png">
+    <meta name="twitter:image" content="https://zetsubouinu.github.io/ZetsubouInu/OGP.png">
 
     <style>
         body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #fffbe6; text-align: center; margin: 0; padding: 20px; padding-bottom: 120px; color: #1a1a1a; }
@@ -83,10 +85,11 @@
         .mvp-answer { font-size: 28px; font-weight: bold; margin: 10px 0; line-height: 1.2; }
         .mvp-author { font-size: 16px; opacity: 0.9; }
 
-        /* フッター周りのスタイル調整 */
         .footer-text { margin-top: 40px; font-size: 12px; color: #999; line-height: 1.8; }
         .footer-link { color: #999; text-decoration: none; margin: 0 5px; transition: 0.2s; }
         .footer-link:hover { color: #1a1a1a; text-decoration: underline; }
+
+        .share-btn { background: #1a1a1a; color: #ffd700; border: 2px solid #ffd700; margin-bottom: 20px; }
 
         select:disabled { opacity: 0.8; color: #1a1a1a; cursor: default; }
     </style>
@@ -213,6 +216,9 @@
             <div id="mvp-author" class="mvp-author">...</div>
         </div>
         <div id="result-list"></div>
+        
+        <button class="share-btn" onclick="shareToX()">結果をXにシェア</button>
+        
         <button id="back-to-wait-btn" onclick="goBackToWait()">待機室に戻る</button>
         <button id="exit-game-btn" class="exit-btn" onclick="exitGame()">ゲームをやめる</button>
         <div class="stamp-area">
@@ -617,6 +623,22 @@
                 } else { document.getElementById("mvp-area").style.display = "none"; }
             } else { document.getElementById("mvp-area").style.display = "none"; }
         }
+
+        // Xシェア機能（リザルト画面の情報を引用 + GitHub PagesのURLを使用）
+        window.shareToX = () => {
+            const mvpAnswer = document.getElementById("mvp-answer").innerText;
+            const mvpOdai = document.getElementById("mvp-odai").innerText;
+
+            let shareText = `【with!大喜利】結果発表！\n`;
+            if (mvpAnswer && mvpAnswer !== "...") {
+                shareText += `🏆今回のMVP回答：${mvpAnswer}\n`;
+                shareText += `（${mvpOdai}）\n\n`;
+            }
+            shareText += `#with大喜利\n`;
+
+            const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent("https://zetsubouinu.github.io/ZetsubouInu/")}`;
+            window.open(xUrl, '_blank');
+        };
 
         window.goBackToWait = async () => {
             currentLocalScreen = "wait";
