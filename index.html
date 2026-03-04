@@ -114,6 +114,7 @@
             © 2026 with!大喜利<br>
             <a href="terms.html" class="footer-link">利用規約</a> | 
             <a href="privacy.html" class="footer-link">プライバシーポリシー</a> | 
+            <a href="QA.html" class="footer-link">よくある質問</a> | 
             <a href="https://docs.google.com/forms/d/e/1FAIpQLSerejBEpNYMoTBTU036IRCy5PAKB6ekz9HhycDnFnNl-SsagQ/viewform?usp=preview" class="footer-link" target="_blank">お問い合わせ</a>
         </div>
     </div>
@@ -614,7 +615,19 @@
                     const voteCandidates = history.filter(a => a.votes === maxVotes);
                     const maxReactions = Math.max(...voteCandidates.map(a => a.reactions || 0));
                     const finalists = voteCandidates.filter(a => (a.reactions || 0) === maxReactions);
-                    const winner = finalists[Math.floor(Math.random() * finalists.length)];
+
+                    // 1. 得票数(済) 2. リアクション数(済) 3. 参加順で決定
+                    // 参加順は data.users の並び順（入室順）を基準とする
+                    let winner = finalists[0];
+                    if (finalists.length > 1) {
+                        const userOrder = data.users.map(u => u.id);
+                        finalists.sort((a, b) => {
+                            const indexA = userOrder.indexOf(a.userId);
+                            const indexB = userOrder.indexOf(b.userId);
+                            return indexA - indexB;
+                        });
+                        winner = finalists[0];
+                    }
 
                     document.getElementById("mvp-area").style.display = "block";
                     document.getElementById("mvp-odai").innerText = `お題: ${winner.odai}`;
