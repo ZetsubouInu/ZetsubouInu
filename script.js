@@ -89,6 +89,15 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("time-select").onchange = (e) => updateRoomSettings('timeLimit', e.target.value);
 });
 
+window.addEventListener("beforeunload", () => {
+    if (roomCode && myId && latestRoomData) {
+        const updatedUsers = latestRoomData.users.map(u => 
+            u.id === myId ? { ...u, isExited: true, isReady: false } : u
+        );
+        updateDoc(doc(db, "rooms", roomCode), { users: updatedUsers });
+    }
+});
+
 async function createRoom() {
     roomCode = Math.floor(10000 + Math.random() * 90000).toString();
     myName = document.getElementById("name-input").value.substring(0, 10) || "名無し";
@@ -122,6 +131,19 @@ function setupRoomListener() {
     onSnapshot(doc(db, "rooms", roomCode), async (docSnap) => {
         if (!docSnap.exists()) return;
         latestRoomData = docSnap.data();
+        
+        // --- ホスト自動継承ロジック ---
+        const activeUsers = latestRoomData.users.filter(u => !u.isExited);
+        const currentHost = activeUsers.find(u => u.id === latestRoomData.hostId);
+        
+        if (!currentHost && activeUsers.length > 0) {
+            // ホストがいなくなっていたら、リストの先頭（一番古い参加者）を新ホストにする
+            const newHostId = activeUsers[0].id;
+            await updateDoc(doc(db, "rooms", roomCode), { hostId: newHostId });
+            return; // updateDocにより再度Snapshotが飛んでくるので一旦終了
+        }
+        // --------------------------
+
         isHost = (latestRoomData.hostId === myId);
         if (currentLocalScreen === "result") { } 
         else if (["playing", "revealing", "voting"].includes(latestRoomData.status)) currentLocalScreen = latestRoomData.status;
@@ -138,9 +160,6 @@ function updateUI(data) {
     
     if (currentLocalScreen !== "home") {
         bottomBar.style.display = "flex";
-        
-        // 【重要】ユーザー数が変わったときのみHTMLを再構築。
-        // これをしないとリアクションのアニメーション中に要素が消えてしまいます。
         const currentIconCount = bottomBar.querySelectorAll('.user-icon-stack').length;
         if (currentIconCount !== activeUsers.length) {
             bottomBar.innerHTML = activeUsers.map(u => `
@@ -152,14 +171,13 @@ function updateUI(data) {
             `).join("");
         }
 
-        // 吹き出し（リアクション）の処理
         data.users.forEach(u => {
             const bubble = document.getElementById(`bubble-${u.id}`);
             if (bubble && u.reactionTime && u.reactionTime !== lastKnownReactionTimes[u.id]) {
                 lastKnownReactionTimes[u.id] = u.reactionTime;
                 bubble.innerText = u.lastReaction;
                 bubble.classList.remove("show");
-                void bubble.offsetWidth; // リフローを強制してアニメーションをリセット
+                void bubble.offsetWidth; 
                 bubble.classList.add("show");
             }
         });
