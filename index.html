@@ -3,7 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>with大喜利</title>
+    <title>with!大喜利</title>
+
+    <meta property="og:title" content="with!大喜利">
+    <meta property="og:type" content="website">
+    <meta property="og:description" content="友だちでボケて笑い合おう！完全無料のオンライン大喜利ゲーム！">
+    <meta property="og:url" content="https://with-oogiri.web.app/">
+    <meta property="og:image" content="https://with-oogiri.web.app/OGP.png">
+    <meta property="og:site_name" content="with!大喜利">
+    
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="with!大喜利">
+    <meta name="twitter:description" content="友だちでボケて笑い合おう！完全無料のオンライン大喜利ゲーム！">
+    <meta name="twitter:image" content="https://with-oogiri.web.app/OGP.png">
+
     <style>
         body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #fffbe6; text-align: center; margin: 0; padding: 20px; padding-bottom: 120px; color: #1a1a1a; }
         .screen { display: none; max-width: 600px; margin: auto; background: white; padding: 40px; border-radius: 30px; box-shadow: 0 15px 35px rgba(0,0,0,0.05); border: 2px solid #eee; }
@@ -18,6 +31,9 @@
         button:hover { background: #333; transform: translateY(-2px); }
         button:disabled { background: #ccc; color: #fff; cursor: not-allowed; transform: none; }
         
+        .exit-btn { background: #ff4d4d; color: white; margin-top: 10px; }
+        .exit-btn:hover { background: #ff3333; }
+
         .icon-selector { display: flex; justify-content: center; gap: 15px; margin: 20px 0; }
         .icon-option { font-size: 32px; cursor: pointer; padding: 15px; border: 3px solid transparent; border-radius: 20px; background: #f9f9f9; transition: 0.2s; }
         .icon-option.selected { border-color: #ffd700; background: #fffbe6; transform: scale(1.1); }
@@ -43,11 +59,20 @@
 
         .bottom-users { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 500px; background: rgba(26,26,26,0.9); color: #ffd700; display: flex; justify-content: center; padding: 15px; border-radius: 100px; gap: 20px; z-index: 100; box-shadow: 0 10px 30px rgba(0,0,0,0.2); backdrop-filter: blur(10px); }
         .user-icon-stack { position: relative; display: flex; flex-direction: column; align-items: center; font-size: 12px; font-weight: bold; }
-        .bubble { position: absolute; bottom: 60px; background: #ffd700; color: #1a1a1a; padding: 8px 15px; border-radius: 15px; font-size: 16px; font-weight: bold; opacity: 0; border: 2px solid #1a1a1a; pointer-events: none; }
-        .bubble.show { animation: pop-fade 2.5s forwards; }
-        @keyframes pop-fade { 0% { transform: scale(0); opacity: 0; } 10% { transform: scale(1.1); opacity: 1; } 80% { transform: scale(1); opacity: 1; } 100% { opacity: 0; } }
+        
+        .bubble { position: absolute; bottom: 60px; background: #ffd700; color: #1a1a1a; padding: 8px 15px; border-radius: 15px; font-size: 16px; font-weight: bold; opacity: 0; border: 2px solid #1a1a1a; pointer-events: none; z-index: 200; white-space: nowrap; }
+        .bubble.show { animation: pop-fade 2.5s ease-out forwards; }
+        @keyframes pop-fade { 
+            0% { transform: scale(0) translateY(10px); opacity: 0; } 
+            10% { transform: scale(1.2) translateY(0); opacity: 1; } 
+            20% { transform: scale(1); opacity: 1; }
+            80% { transform: scale(1); opacity: 1; } 
+            100% { transform: scale(0.8); opacity: 0; } 
+        }
+        
         .stamp-area { margin-top: 20px; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
-        .stamp-btn { width: auto; padding: 10px 20px; background: #ffd700; color: #1a1a1a; border: 2px solid #1a1a1a; }
+        .stamp-btn { width: auto; padding: 10px 15px; background: #ffd700; color: #1a1a1a; border: 2px solid #1a1a1a; white-space: nowrap; font-size: 14px; }
+        
         #answer-display { font-size: 36px; font-weight: bold; min-height: 120px; display: flex; align-items: center; justify-content: center; }
         .vote-item { background: #fff; margin: 15px 0; padding: 20px; border-radius: 50px; cursor: pointer; border: 2px solid #1a1a1a; width: 100%; display: block; font-size: 20px; }
         .result-item { text-align: left; padding: 15px; border-bottom: 2px solid #eee; font-size: 20px; font-weight: bold; }
@@ -58,6 +83,11 @@
         .mvp-answer { font-size: 28px; font-weight: bold; margin: 10px 0; line-height: 1.2; }
         .mvp-author { font-size: 16px; opacity: 0.9; }
 
+        /* フッター周りのスタイル調整 */
+        .footer-text { margin-top: 40px; font-size: 12px; color: #999; line-height: 1.8; }
+        .footer-link { color: #999; text-decoration: none; margin: 0 5px; transition: 0.2s; }
+        .footer-link:hover { color: #1a1a1a; text-decoration: underline; }
+
         select:disabled { opacity: 0.8; color: #1a1a1a; cursor: default; }
     </style>
 </head>
@@ -65,7 +95,7 @@
 
     <div id="screen-home" class="screen active">
         <img src="Logo.png" alt="with!大喜利" class="main-logo">
-        <input type="text" id="name-input" placeholder="名前を入力">
+        <input type="text" id="name-input" placeholder="名前を入力（10文字まで）" maxlength="10">
         <p style="font-weight: bold;">アイコンを選択:</p>
         <div class="icon-selector">
             <div class="icon-option selected" onclick="selectIcon('🐱', this)">🐱</div>
@@ -77,6 +107,12 @@
         <hr style="border: 0; border-top: 2px solid #eee; margin: 30px 0;">
         <input type="text" id="room-input" placeholder="5桁のコードを入力">
         <button onclick="joinRoom()">部屋に入る</button>
+        <div class="footer-text">
+            © 2026 with!大喜利<br>
+            <a href="terms.html" class="footer-link">利用規約</a> | 
+            <a href="privacy.html" class="footer-link">プライバシーポリシー</a> | 
+            <a href="https://docs.google.com/forms/d/e/1FAIpQLSerejBEpNYMoTBTU036IRCy5PAKB6ekz9HhycDnFnNl-SsagQ/viewform?usp=preview" class="footer-link" target="_blank">お問い合わせ</a>
+        </div>
     </div>
 
     <div id="screen-wait" class="screen">
@@ -94,6 +130,7 @@
         <div style="margin-top: 20px;">
             <button id="ready-btn" onclick="toggleReady()">準備完了！</button>
             <button id="start-btn-container" style="display:none; margin-top: 10px;" onclick="startGame()" disabled>ゲーム開始！</button>
+            <button id="wait-exit-btn" class="exit-btn" onclick="exitGame()">退出する</button>
         </div>
 
         <div id="room-settings-area" style="display:none; margin-top: 20px; border-top: 2px solid #eee; padding-top: 20px;">
@@ -119,7 +156,7 @@
             
             <label style="font-weight: bold;">お題の数 (1〜10問):</label><br>
             <select id="round-select" onchange="updateRoomSettings('totalRounds', this.value)">
-                </select>
+            </select>
             
             <p id="start-condition-msg" style="color:#1a1a1a; font-size: 14px; margin-top: 10px;">全員が準備完了になると開始できます</p>
         </div>
@@ -132,15 +169,15 @@
             <span id="timer-display" style="color: red;">残り --秒</span>
         </div>
         <div class="odai-box" id="current-odai">お題を取得中...</div>
-        <input type="text" id="my-answer" placeholder="ボケを入力！">
+        <input type="text" id="my-answer" placeholder="ボケを入力！（100文字まで）" maxlength="100">
         <button id="submit-btn" onclick="submitAnswer()">回答を送信</button>
         <p id="playing-wait-msg" style="display:none; font-weight: bold; color: #666;">送信完了！他の人を待っています...</p>
         <div class="stamp-area">
             <button class="stamp-btn" onclick="sendStamp('W')">W</button>
             <button class="stamp-btn" onclick="sendStamp('草')">草</button>
             <button class="stamp-btn" onclick="sendStamp('！？')">！？</button>
-            <button class="stamp-btn" onclick="sendStamp('うまい！')">うまい！</button>
-            <button class="stamp-btn" onclick="sendStamp('8888')">8888</button>
+            <button class="stamp-btn" onclick="sendStamp('難しい…')">難しい…</button>
+            <button class="stamp-btn" onclick="sendStamp('よゆー！')">よゆー！</button>
         </div>
     </div>
 
@@ -177,7 +214,14 @@
         </div>
         <div id="result-list"></div>
         <button id="back-to-wait-btn" onclick="goBackToWait()">待機室に戻る</button>
-        <button id="exit-game-btn" onclick="exitGame()">ゲームをやめる</button>
+        <button id="exit-game-btn" class="exit-btn" onclick="exitGame()">ゲームをやめる</button>
+        <div class="stamp-area">
+            <button class="stamp-btn" onclick="sendStamp('W')">W</button>
+            <button class="stamp-btn" onclick="sendStamp('草')">草</button>
+            <button class="stamp-btn" onclick="sendStamp('！？')">！？</button>
+            <button class="stamp-btn" onclick="sendStamp('おめでとう')">おめでとう</button>
+            <button class="stamp-btn" onclick="sendStamp('ありがとう')">ありがとう</button>
+        </div>
     </div>
 
     <div id="copy-toast">コピー完了</div>
@@ -206,7 +250,6 @@
         let lastKnownReactionTimes = {}; 
         let isProcessingAction = false; 
 
-        // 初期化時にお題の数セレクトボックスを生成
         const roundSelect = document.getElementById("round-select");
         for(let i=1; i<=10; i++) {
             let opt = document.createElement("option");
@@ -216,6 +259,16 @@
         }
 
         function generateId() { return Math.random().toString(36).substring(2, 10); }
+
+        function pickUniqueOdai(usedIndices) {
+            let availableIndices = odaiList.map((_, i) => i).filter(i => !usedIndices.includes(i));
+            if (availableIndices.length === 0) {
+                availableIndices = odaiList.map((_, i) => i);
+                usedIndices = [];
+            }
+            const randomIndex = availableIndices[Math.floor(Math.random() * availableIndices.length)];
+            return { index: randomIndex, text: odaiList[randomIndex], newUsedIndices: [...usedIndices, randomIndex] };
+        }
 
         window.selectIcon = (icon, el) => {
             myIcon = icon;
@@ -251,7 +304,7 @@
 
         window.createRoom = async () => {
             roomCode = Math.floor(10000 + Math.random() * 90000).toString();
-            myName = document.getElementById("name-input").value || "名無し";
+            myName = document.getElementById("name-input").value.substring(0, 10) || "名無し";
             myId = generateId();
             isHost = true;
             currentLocalScreen = "wait";
@@ -259,7 +312,7 @@
                 status: "waiting", 
                 users: [{ id: myId, name: myName, icon: myIcon, isReady: false, lastReaction: "", reactionTime: 0, totalScore: 0, isExited: false }], 
                 hostId: myId, originalHostId: myId,
-                odai: "", answers: [], revealIndex: 0, timeLeft: 60, voteCount: 0,
+                odai: "", usedOdaiIndices: [], answers: [], revealIndex: 0, timeLeft: 60, voteCount: 0,
                 currentRound: 0, totalRounds: 3,
                 maxUsers: 8, timeLimit: 60, allAnswersHistory: []
             });
@@ -284,7 +337,7 @@
                 if (activeUsers.length >= (data.maxUsers || 8)) { alert("満員です"); return; }
                 if (data.status !== "waiting") { alert("進行中です"); return; }
             } else { alert("部屋がありません"); return; }
-            myName = document.getElementById("name-input").value || "ゲスト";
+            myName = document.getElementById("name-input").value.substring(0, 10) || "ゲスト";
             myId = generateId();
             isHost = false;
             currentLocalScreen = "wait";
@@ -340,13 +393,25 @@
             
             if (currentLocalScreen !== "home") {
                 bottomBar.style.display = "flex";
-                bottomBar.innerHTML = activeUsers.map(u => `<div class="user-icon-stack" id="stack-${u.id}"><div class="bubble" id="bubble-${u.id}"></div><div class="icon">${u.icon}</div><div>${u.name}</div></div>`).join("");
+                const currentIconCount = bottomBar.querySelectorAll('.user-icon-stack').length;
+                if (currentIconCount !== activeUsers.length) {
+                    bottomBar.innerHTML = activeUsers.map(u => `
+                        <div class="user-icon-stack" id="stack-${u.id}">
+                            <div class="bubble" id="bubble-${u.id}"></div>
+                            <div class="icon">${u.icon}</div>
+                            <div>${u.name.substring(0, 10)}${u.id === myId ? '<br>(あなた)' : ''}</div>
+                        </div>
+                    `).join("");
+                }
+
                 data.users.forEach(u => {
                     const bubble = document.getElementById(`bubble-${u.id}`);
                     if (bubble && u.reactionTime && u.reactionTime !== lastKnownReactionTimes[u.id]) {
                         lastKnownReactionTimes[u.id] = u.reactionTime;
                         bubble.innerText = u.lastReaction;
-                        bubble.classList.remove("show"); void bubble.offsetWidth; bubble.classList.add("show");
+                        bubble.classList.remove("show");
+                        void bubble.offsetWidth; 
+                        bubble.classList.add("show");
                     }
                 });
             } else { bottomBar.style.display = "none"; }
@@ -367,7 +432,7 @@
                 }
                 document.getElementById("user-list").innerHTML = activeUsers.map(u => `
                     <div class="user-entry">
-                        <span>${u.icon} ${u.name} ${u.id === data.hostId ? '👑' : ''}</span>
+                        <span>${u.icon} ${u.name.substring(0, 10)}${u.id === myId ? ' (あなた)' : ''} ${u.id === data.hostId ? '👑' : ''}</span>
                         <span class="status-badge ${u.isReady ? 'status-ready' : 'status-wait'}">${u.isReady ? '準備完了' : '待機中'}</span>
                     </div>
                 `).join("");
@@ -416,7 +481,7 @@
             } 
             else if (currentLocalScreen === "revealing") {
                 document.getElementById("revealing-odai").innerText = `お題：${data.odai}`;
-                const ans = data.answers[data.revealIndex];
+                const ans = data.answers && data.answers.length > 0 ? data.answers[data.revealIndex] : null;
                 if (ans) {
                     document.getElementById("answer-display").innerText = ans.text;
                     document.getElementById("author-name").innerText = `回答者: ${ans.userName}`;
@@ -444,10 +509,12 @@
             });
             const updatedHistory = [...(data.allAnswersHistory || []), ...data.answers.map(a => ({...a, odai: data.odai}))];
             if (data.currentRound < data.totalRounds) {
+                const nextOdai = pickUniqueOdai(data.usedOdaiIndices || []);
                 await updateDoc(doc(db, "rooms", roomCode), {
                     status: "playing", users: updatedUsers, currentRound: data.currentRound + 1,
                     answers: [], revealIndex: 0, voteCount: 0, timeLeft: data.timeLimit,
-                    odai: odaiList[Math.floor(Math.random() * odaiList.length)], allAnswersHistory: updatedHistory
+                    odai: nextOdai.text, usedOdaiIndices: nextOdai.newUsedIndices,
+                    allAnswersHistory: updatedHistory
                 });
                 startTimer(data.timeLimit);
             } else {
@@ -458,10 +525,12 @@
         window.startGame = async () => {
             if (!isHost) return;
             const participants = latestRoomData.users.filter(u => !u.isExited).map(u => ({ ...u, isReady: false, totalScore: 0 }));
+            const nextOdai = pickUniqueOdai([]);
             await updateDoc(doc(db, "rooms", roomCode), {
                 status: "playing", users: participants, currentRound: 1, 
                 answers: [], revealIndex: 0, timeLeft: latestRoomData.timeLimit, voteCount: 0,
-                odai: odaiList[Math.floor(Math.random() * odaiList.length)], allAnswersHistory: []
+                odai: nextOdai.text, usedOdaiIndices: nextOdai.newUsedIndices,
+                allAnswersHistory: []
             });
             startTimer(latestRoomData.timeLimit);
         };
@@ -482,13 +551,19 @@
             if(!text) return;
             isProcessingAction = true;
             document.getElementById("submit-btn").disabled = true;
-            await updateDoc(doc(db, "rooms", roomCode), { answers: arrayUnion({ userId: myId, userName: myName, text: text, votes: 0 }) });
+            await updateDoc(doc(db, "rooms", roomCode), { answers: arrayUnion({ userId: myId, userName: myName, text: text, votes: 0, reactions: 0 }) });
             document.getElementById("my-answer").value = "";
         };
 
         async function goToReveal() {
             if (timerInterval) clearInterval(timerInterval);
-            await updateDoc(doc(db, "rooms", roomCode), { status: "revealing", revealIndex: 0 });
+            if (!isHost) return;
+            const currentAnswers = latestRoomData.answers || [];
+            if (currentAnswers.length === 0) {
+                processVoteEnd(latestRoomData);
+            } else {
+                await updateDoc(doc(db, "rooms", roomCode), { status: "revealing", revealIndex: 0 });
+            }
         }
 
         window.nextReveal = async () => { await updateDoc(doc(db, "rooms", roomCode), { revealIndex: latestRoomData.revealIndex + 1 }); };
@@ -524,23 +599,21 @@
         function renderFinalResults(data) {
             const list = document.getElementById("result-list");
             const sorted = [...data.users].sort((a,b) => (b.totalScore || 0) - (a.totalScore || 0));
-            list.innerHTML = sorted.map((u, i) => `<div class="result-item"><strong>${i+1}位 (${u.totalScore || 0}pt):</strong> ${u.icon} ${u.name} ${u.isExited ? '<small>(退出済)</small>' : ''}</div>`).join("");
+            list.innerHTML = sorted.map((u, i) => `<div class="result-item"><strong>${i+1}位 (${u.totalScore || 0}pt):</strong> ${u.icon} ${u.name.substring(0, 10)}${u.id === myId ? ' (あなた)' : ''} ${u.isExited ? '<small>(退出済)</small>' : ''}</div>`).join("");
 
             const history = data.allAnswersHistory || [];
             if (history.length > 0) {
                 const maxVotes = Math.max(...history.map(a => a.votes));
                 if (maxVotes > 0) {
-                    const candidates = history.filter(a => a.votes === maxVotes);
-                    let winner = candidates[0];
-                    let minIdx = data.users.findIndex(u => u.id === winner.userId);
-                    candidates.forEach(c => {
-                        const idx = data.users.findIndex(u => u.id === c.userId);
-                        if (idx < minIdx) { minIdx = idx; winner = c; }
-                    });
+                    const voteCandidates = history.filter(a => a.votes === maxVotes);
+                    const maxReactions = Math.max(...voteCandidates.map(a => a.reactions || 0));
+                    const finalists = voteCandidates.filter(a => (a.reactions || 0) === maxReactions);
+                    const winner = finalists[Math.floor(Math.random() * finalists.length)];
+
                     document.getElementById("mvp-area").style.display = "block";
                     document.getElementById("mvp-odai").innerText = `お題: ${winner.odai}`;
                     document.getElementById("mvp-answer").innerText = `「${winner.text}」`;
-                    document.getElementById("mvp-author").innerText = `${winner.userName} （${winner.votes}票獲得）`;
+                    document.getElementById("mvp-author").innerText = `${winner.userName} （${winner.votes}票 / ${winner.reactions || 0}反応）`;
                 } else { document.getElementById("mvp-area").style.display = "none"; }
             } else { document.getElementById("mvp-area").style.display = "none"; }
         }
@@ -553,15 +626,36 @@
         };
 
         window.exitGame = async () => {
-            if (!latestRoomData) return;
+            if (!latestRoomData) {
+                location.reload();
+                return;
+            }
             const updatedUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, isExited: true, isReady: false } : u);
             await updateDoc(doc(db, "rooms", roomCode), { users: updatedUsers });
-            location.reload();
+            
+            roomCode = "";
+            myId = "";
+            isHost = false;
+            currentLocalScreen = "home";
+            location.reload(); 
         };
 
         window.sendStamp = async (type) => {
             const newUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, lastReaction: type, reactionTime: Date.now() } : u);
-            await updateDoc(doc(db, "rooms", roomCode), { users: newUsers });
+            const updateFields = { users: newUsers };
+            if (latestRoomData.status === "revealing") {
+                const currentAns = latestRoomData.answers[latestRoomData.revealIndex];
+                if (currentAns && currentAns.userId !== myId) {
+                    const newAnswers = latestRoomData.answers.map((a, i) => {
+                        if (i === latestRoomData.revealIndex) {
+                            return { ...a, reactions: (a.reactions || 0) + 1 };
+                        }
+                        return a;
+                    });
+                    updateFields.answers = newAnswers;
+                }
+            }
+            await updateDoc(doc(db, "rooms", roomCode), updateFields);
         };
     </script>
 </body>
