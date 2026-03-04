@@ -68,6 +68,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const setupStamps = (containerId, list) => {
         const container = document.getElementById(containerId);
         if (container) {
+            container.innerHTML = ""; // 重複防止
             list.forEach(type => {
                 const btn = document.createElement('button'); btn.className = 'stamp-btn'; btn.innerText = type;
                 btn.onclick = () => sendStamp(type); container.appendChild(btn);
@@ -100,7 +101,6 @@ async function createRoom() {
     myName = document.getElementById("name-input").value.substring(0, 10) || "名無し";
     myId = generateId(); isHost = true; currentLocalScreen = "wait";
     
-    // expireAtをFirebase専用のTimestamp形式に変更
     const expireDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
     
     await setDoc(doc(db, "rooms", roomCode), {
@@ -235,7 +235,6 @@ async function startGame() {
     const participants = latestRoomData.users.filter(u => !u.isExited).map(u => ({ ...u, isReady: false, totalScore: 0 }));
     const nextOdai = pickUniqueOdai([]);
     
-    // 【重要】既存のanswersやrevealIndexを完全にリセットして更新
     await updateDoc(doc(db, "rooms", roomCode), {
         status: "playing", 
         users: participants, 
@@ -245,7 +244,7 @@ async function startGame() {
         timeLeft: latestRoomData.timeLimit || 60, 
         voteCount: 0,
         odai: nextOdai.text, 
-        usedOdaiIndices: nextOdai.newUsedIndices, 
+        usedOdaiIndices: nextOdai.newUsedIndices, // 修正済み
         allAnswersHistory: []
     });
     startTimer(latestRoomData.timeLimit || 60);
