@@ -17,19 +17,128 @@ const db = getFirestore(app);
 
 let roomCode = "", myName = "", myId = "", myIcon = "🐱", isHost = false, hasVoted = false, latestRoomData = null, timerInterval = null;
 let currentLocalScreen = "home", lastKnownReactionTimes = {}, isProcessingAction = false;
+
+let currentRevealingAnswerIndex = -1;
+let typeWriterTimer = null;
+let playedCountdownRounds = []; 
+
 const icons = ['🐱', '🐶', '🦊', '🐈', '🐯', '🦁', '🐰', '🐻'];
 
-function escapeHTML(str) {
-    if (!str) return "";
-    return str.replace(/[&<>"']/g, function(m) {
-        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+// --- 🌟 効果音・BGMの読み込みと設定 ---
+const reactionSound = new Audio("reaction.mp3");
+const bgmMain = new Audio("bgm_main.mp3");
+bgmMain.loop = true; 
+bgmMain.volume = 0;  
+
+let isMainBgmPlaying = false;
+let hasUserInteracted = false;
+let fadeInterval = null;
+
+// ゲームとしての「適正な最大音量」を裏側で固定
+const BASE_BGM_VOLUME = 0.3; 
+const BASE_SE_VOLUME = 0.6; 
+
+// ユーザーが設定したシークバーの割合（初期値は1＝100%）
+let bgmFactor = 1.0; 
+let seFactor = 1.0; 
+
+function fadeAudio(audio, targetScreenFactor, duration) {
+    if (fadeInterval) clearInterval(fadeInterval);
+    const steps = 30;
+    const stepTime = duration / steps;
+    
+    // 目標音量 = (ON/OFF) × (シークバーの割合) × (適正な最大音量)
+    const targetActualVol = targetScreenFactor * bgmFactor * BASE_BGM_VOLUME;
+    const volStep = (targetActualVol - audio.volume) / steps;
+
+    if (targetScreenFactor > 0 && audio.paused) {
+        audio.play().catch(e => console.log("再生ブロック:", e));
+    }
+
+    fadeInterval = setInterval(() => {
+        let newVol = audio.volume + volStep;
+        if ((volStep > 0 && newVol >= targetActualVol) || (volStep < 0 && newVol <= targetActualVol)) {
+            newVol = targetActualVol;
+            clearInterval(fadeInterval);
+            fadeInterval = null;
+            if (targetActualVol === 0) audio.pause();
+        }
+        audio.volume = Math.max(0, Math.min(1, newVol));
+    }, stepTime);
+}
+
+function manageBgm(screen) {
+    if (!hasUserInteracted) return;
+    const mainBgmScreens = ["home", "wait", "result"];
+    if (mainBgmScreens.includes(screen)) {
+        if (!isMainBgmPlaying) {
+            isMainBgmPlaying = true;
+            fadeAudio(bgmMain, 1, 1000); 
+        }
+    } else {
+        if (isMainBgmPlaying) {
+            isMainBgmPlaying = false;
+            fadeAudio(bgmMain, 0, 1500); 
+        }
+    }
+}
+
+function unlockAudio() {
+    if (!hasUserInteracted) {
+        hasUserInteracted = true;
+        manageBgm(currentLocalScreen);
+        document.removeEventListener("click", unlockAudio);
+        document.removeEventListener("keydown", unlockAudio);
+    }
+}
+document.addEventListener("click", unlockAudio);
+document.addEventListener("keydown", unlockAudio);
+
+function typeWriter(element, text, speed = 190) {
+    if (typeWriterTimer) clearInterval(typeWriterTimer);
+    element.innerHTML = ""; 
+    const chars = Array.from(text); 
+    chars.forEach(char => {
+        const span = document.createElement("span");
+        span.textContent = char;
+        span.style.visibility = "hidden"; 
+        element.appendChild(span);
     });
+    let i = 0;
+    const spans = element.querySelectorAll("span");
+    typeWriterTimer = setInterval(() => {
+        if (i < spans.length) {
+            spans[i].style.visibility = "visible"; 
+            i++;
+        } else { clearInterval(typeWriterTimer); typeWriterTimer = null; }
+    }, speed);
 }
 
-function renderIcon(icon) {
-    return (icon.includes('.') || icon.startsWith('http')) ? `<img src="${icon}" alt="icon">` : icon;
+function showCountdown() {
+    const overlay = document.getElementById("countdown-overlay");
+    const textEl = document.getElementById("countdown-text");
+    if (!overlay || !textEl) return;
+    overlay.style.display = "flex";
+    let count = 3;
+    textEl.innerText = count;
+    textEl.classList.remove("countdown-anim");
+    void textEl.offsetWidth; textEl.classList.add("countdown-anim");
+    const interval = setInterval(() => {
+        count--;
+        if (count > 0) {
+            textEl.innerText = count;
+            textEl.classList.remove("countdown-anim");
+            void textEl.offsetWidth; textEl.classList.add("countdown-anim");
+        } else if (count === 0) {
+            textEl.innerText = "START!";
+            textEl.classList.remove("countdown-anim");
+            void textEl.offsetWidth; textEl.classList.add("countdown-anim");
+        } else { clearInterval(interval); overlay.style.display = "none"; }
+    }, 1000);
 }
 
+function escapeHTML(str) { if (!str) return ""; return str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m])); }
+function renderIcon(icon) { return (icon.includes('.') || icon.startsWith('http')) ? `<img src="${icon}" alt="icon">` : icon; }
 function generateId() { return Math.random().toString(36).substring(2, 10); }
 
 function pickUniqueOdai(usedIndices) {
@@ -40,38 +149,86 @@ function pickUniqueOdai(usedIndices) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    // 🌟 シークバーの背景色（黄色とグレーの割合）をツマミに合わせて塗る関数
+    function updateSliderBg(slider) {
+        const val = (slider.value - slider.min) / (slider.max - slider.min) * 100;
+        slider.style.background = `linear-gradient(to right, #ffd700 ${val}%, #ddd ${val}%)`;
+    }
+
+    // パネル開閉
+    const toggleBtn = document.getElementById("volume-toggle-btn");
+    const panel = document.getElementById("volume-panel");
+    if (toggleBtn && panel) {
+        toggleBtn.onclick = (e) => {
+            e.stopPropagation();
+            panel.classList.toggle("active");
+        };
+        document.addEventListener("click", () => panel.classList.remove("active"));
+        panel.onclick = (e) => e.stopPropagation();
+    }
+
+    const bgmSlider = document.getElementById("bgm-volume");
+    if (bgmSlider) {
+        bgmSlider.value = bgmFactor; 
+        updateSliderBg(bgmSlider); // 🌟 初期状態の背景色を適用
+        bgmSlider.addEventListener("input", (e) => {
+            updateSliderBg(e.target); // 🌟 ツマミを動かすたびに色を塗り直す
+            bgmFactor = parseFloat(e.target.value); 
+            if (isMainBgmPlaying && !fadeInterval) {
+                bgmMain.volume = bgmFactor * BASE_BGM_VOLUME;
+            }
+        });
+    }
+
+    const seSlider = document.getElementById("se-volume");
+    if (seSlider) {
+        seSlider.value = seFactor; 
+        updateSliderBg(seSlider); // 🌟 初期状態の背景色を適用
+        seSlider.addEventListener("input", (e) => { 
+            updateSliderBg(e.target); // 🌟 ツマミを動かすたびに色を塗り直す
+            seFactor = parseFloat(e.target.value); 
+        });
+        seSlider.addEventListener("change", (e) => {
+            const playSound = reactionSound.cloneNode();
+            playSound.volume = seFactor * BASE_SE_VOLUME; 
+            playSound.play().catch(() => {});
+        });
+    }
+
     const iconContainer = document.getElementById('home-icon-selector');
-    icons.forEach((icon, index) => {
-        const div = document.createElement('div');
-        div.className = `icon-option ${index === 0 ? 'selected' : ''}`;
-        div.innerText = icon;
-        div.onclick = () => { myIcon = icon; document.querySelectorAll('.icon-option').forEach(opt => opt.classList.remove('selected')); div.classList.add('selected'); };
-        iconContainer.appendChild(div);
-    });
+    if (iconContainer) {
+        icons.forEach((icon, index) => {
+            const div = document.createElement('div');
+            div.className = `icon-option ${index === 0 ? 'selected' : ''}`;
+            div.innerText = icon;
+            div.onclick = () => { myIcon = icon; document.querySelectorAll('.icon-option').forEach(opt => opt.classList.remove('selected')); div.classList.add('selected'); };
+            iconContainer.appendChild(div);
+        });
+    }
 
     const roundSelect = document.getElementById("round-select");
-    for(let i=1; i<=10; i++) {
-        let opt = document.createElement("option"); opt.value = i; opt.innerText = `${i}問`;
-        if(i === 3) opt.selected = true;
-        roundSelect.appendChild(opt);
+    if (roundSelect) {
+        for(let i=1; i<=10; i++) {
+            let opt = document.createElement("option"); opt.value = i; opt.innerText = `${i}問`;
+            if(i === 3) opt.selected = true;
+            roundSelect.appendChild(opt);
+        }
+        roundSelect.onchange = (e) => updateRoomSettings('totalRounds', e.target.value);
     }
-    roundSelect.onchange = (e) => updateRoomSettings('totalRounds', e.target.value);
-
-    const playingStamps = ['W', '草', '！？', '難しい...', 'よゆー！'];
-    const revealingStamps = ['W', '草', '！？', 'うまい！', '8888'];
-    const resultStamps = ['W', '草', '！？', 'おめでとう', 'ありがとう'];
 
     const setupStamps = (containerId, list) => {
         const container = document.getElementById(containerId);
-        list.forEach(type => {
-            const btn = document.createElement('button'); btn.className = 'stamp-btn'; btn.innerText = type;
-            btn.onclick = () => sendStamp(type); container.appendChild(btn);
-        });
+        if (container) {
+            container.innerHTML = "";
+            list.forEach(type => {
+                const btn = document.createElement('button'); btn.className = 'stamp-btn'; btn.innerText = type;
+                btn.onclick = () => sendStamp(type); container.appendChild(btn);
+            });
+        }
     };
-
-    setupStamps('playing-stamps', playingStamps);
-    setupStamps('revealing-stamps', revealingStamps);
-    setupStamps('result-stamps', resultStamps);
+    setupStamps('playing-stamps', ['W', '草', '！？', '難しい...', 'よゆー！']);
+    setupStamps('revealing-stamps', ['W', '草', '！？', 'うまい！', '8888']);
+    setupStamps('result-stamps', ['W', '草', '！？', 'おめでとう', 'ありがとう']);
 
     document.getElementById("create-room-btn").onclick = createRoom;
     document.getElementById("join-room-btn").onclick = joinRoom;
@@ -91,9 +248,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 window.addEventListener("beforeunload", () => {
     if (roomCode && myId && latestRoomData) {
-        const updatedUsers = latestRoomData.users.map(u => 
-            u.id === myId ? { ...u, isExited: true, isReady: false } : u
-        );
+        const updatedUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, isExited: true, isReady: false } : u);
         updateDoc(doc(db, "rooms", roomCode), { users: updatedUsers });
     }
 });
@@ -102,6 +257,7 @@ async function createRoom() {
     roomCode = Math.floor(10000 + Math.random() * 90000).toString();
     myName = document.getElementById("name-input").value.substring(0, 10) || "名無し";
     myId = generateId(); isHost = true; currentLocalScreen = "wait";
+    playedCountdownRounds = []; 
     await setDoc(doc(db, "rooms", roomCode), {
         status: "waiting", users: [{ id: myId, name: myName, icon: myIcon, isReady: false, lastReaction: "", reactionTime: 0, totalScore: 0, isExited: false }], 
         hostId: myId, originalHostId: myId, odai: "", usedOdaiIndices: [], answers: [], revealIndex: 0, timeLeft: 60, voteCount: 0,
@@ -123,6 +279,7 @@ async function joinRoom() {
     } else { alert("部屋がありません"); return; }
     myName = document.getElementById("name-input").value.substring(0, 10) || "ゲスト";
     myId = generateId(); isHost = false; currentLocalScreen = "wait";
+    playedCountdownRounds = []; 
     await updateDoc(roomRef, { users: arrayUnion({ id: myId, name: myName, icon: myIcon, isReady: false, lastReaction: "", reactionTime: 0, totalScore: 0, isExited: false }) });
     setupRoomListener();
 }
@@ -131,54 +288,51 @@ function setupRoomListener() {
     onSnapshot(doc(db, "rooms", roomCode), async (docSnap) => {
         if (!docSnap.exists()) return;
         latestRoomData = docSnap.data();
-        
-        // --- ホスト自動継承ロジック ---
         const activeUsers = latestRoomData.users.filter(u => !u.isExited);
         const currentHost = activeUsers.find(u => u.id === latestRoomData.hostId);
-        
         if (!currentHost && activeUsers.length > 0) {
-            // ホストがいなくなっていたら、リストの先頭（一番古い参加者）を新ホストにする
-            const newHostId = activeUsers[0].id;
-            await updateDoc(doc(db, "rooms", roomCode), { hostId: newHostId });
-            return; // updateDocにより再度Snapshotが飛んでくるので一旦終了
+            await updateDoc(doc(db, "rooms", roomCode), { hostId: activeUsers[0].id });
+            return;
         }
-        // --------------------------
-
         isHost = (latestRoomData.hostId === myId);
-        if (currentLocalScreen === "result") { } 
-        else if (["playing", "revealing", "voting"].includes(latestRoomData.status)) currentLocalScreen = latestRoomData.status;
-        else if (latestRoomData.status === "result") currentLocalScreen = "result";
-        else if (latestRoomData.status === "waiting" && currentLocalScreen !== "home") currentLocalScreen = "wait";
+        if (latestRoomData.status === "waiting") {
+            if (currentLocalScreen !== "home" && currentLocalScreen !== "result") currentLocalScreen = "wait";
+        } else if (["playing", "revealing", "voting"].includes(latestRoomData.status)) {
+            currentLocalScreen = latestRoomData.status;
+        } else if (latestRoomData.status === "result") {
+            if (currentLocalScreen !== "home" && currentLocalScreen !== "wait") currentLocalScreen = "result";
+        }
         updateUI(latestRoomData);
     });
 }
 
 function updateUI(data) {
+    manageBgm(currentLocalScreen);
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     const activeUsers = data.users.filter(u => !u.isExited);
     const bottomBar = document.getElementById("bottom-users");
-    
     if (currentLocalScreen !== "home") {
         bottomBar.style.display = "flex";
-        const currentIconCount = bottomBar.querySelectorAll('.user-icon-stack').length;
-        if (currentIconCount !== activeUsers.length) {
-            bottomBar.innerHTML = activeUsers.map(u => `
-                <div class="user-icon-stack" id="stack-${u.id}">
-                    <div class="bubble" id="bubble-${u.id}"></div>
-                    <div class="icon">${renderIcon(u.icon)}</div>
-                    <div>${escapeHTML(u.name.substring(0, 10))}${u.id === myId ? '<br>(あなた)' : ''}</div>
-                </div>
-            `).join("");
+        const answerStatus = (data.answers || []).map(a => a.userId).sort().join(",");
+        const currentSignature = activeUsers.length + "_" + answerStatus + "_" + data.status + "_" + currentLocalScreen;
+        if (bottomBar.dataset.signature !== currentSignature) {
+            bottomBar.dataset.signature = currentSignature;
+            bottomBar.innerHTML = activeUsers.map(u => {
+                const hasAnswered = data.answers && data.answers.some(a => a.userId === u.id);
+                const checkMark = (currentLocalScreen === "playing" && hasAnswered) ? `<div style=\"position:absolute; top:-5px; right:-5px; background:white; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; border:2px solid #1a1a1a; z-index:10; font-size:12px; box-shadow:0 2px 5px rgba(0,0,0,0.2);\">✅</div>` : "";
+                return `<div class=\"user-icon-stack\" id=\"stack-${u.id}\" style=\"position:relative;\">${checkMark}<div class=\"bubble\" id=\"bubble-${u.id}\"></div><div class=\"icon\">${renderIcon(u.icon)}</div><div>${escapeHTML(u.name.substring(0, 10))}${u.id === myId ? '<br>(あなた)' : ''}</div></div>`;
+            }).join("");
         }
-
         data.users.forEach(u => {
             const bubble = document.getElementById(`bubble-${u.id}`);
             if (bubble && u.reactionTime && u.reactionTime !== lastKnownReactionTimes[u.id]) {
                 lastKnownReactionTimes[u.id] = u.reactionTime;
                 bubble.innerText = u.lastReaction;
-                bubble.classList.remove("show");
-                void bubble.offsetWidth; 
-                bubble.classList.add("show");
+                bubble.classList.remove("show"); void bubble.offsetWidth; bubble.classList.add("show");
+                
+                const playSound = reactionSound.cloneNode();
+                playSound.volume = seFactor * BASE_SE_VOLUME;
+                playSound.play().catch(() => {});
             }
         });
     } else { bottomBar.style.display = "none"; }
@@ -202,6 +356,7 @@ function updateUI(data) {
                 <span class="status-badge ${u.isReady ? 'status-ready' : 'status-wait'}">${u.isReady ? '準備完了' : '待機中'}</span>
             </div>
         `).join("");
+        const hostMsg = document.getElementById("host-msg"); if (hostMsg) hostMsg.style.display = isHost ? "block" : "none";
         document.getElementById("room-settings-area").style.display = "block"; 
         document.getElementById("start-btn-container").style.display = isHost ? "inline-block" : "none";
         document.getElementById("guest-msg").style.display = isHost ? "none" : "block";
@@ -211,7 +366,8 @@ function updateUI(data) {
         if (isHost) { const allReady = activeUsers.length >= 2 && activeUsers.every(u => u.isReady); document.getElementById("start-btn-container").disabled = !allReady; }
     } 
     else if (currentLocalScreen === "playing") {
-        isProcessingAction = false; hasVoted = false;
+        isProcessingAction = false; hasVoted = false; currentRevealingAnswerIndex = -1; 
+        if (!playedCountdownRounds.includes(data.currentRound)) { playedCountdownRounds.push(data.currentRound); showCountdown(); }
         document.getElementById("round-display").innerText = `第 ${data.currentRound} / ${data.totalRounds} ラウンド`;
         document.getElementById("current-odai").innerText = data.odai;
         document.getElementById("timer-display").innerText = `残り ${data.timeLeft}秒`;
@@ -224,7 +380,7 @@ function updateUI(data) {
         document.getElementById("revealing-odai").innerText = `お題：${data.odai}`;
         const ans = data.answers && data.answers.length > 0 ? data.answers[data.revealIndex] : null;
         if (ans) {
-            document.getElementById("answer-display").innerText = ans.text;
+            if (currentRevealingAnswerIndex !== data.revealIndex) { currentRevealingAnswerIndex = data.revealIndex; typeWriter(document.getElementById("answer-display-inner"), ans.text, 190); }
             document.getElementById("author-name").innerText = `回答者: ${escapeHTML(ans.userName)}`;
             document.getElementById("next-reveal-btn").style.display = isHost ? "block" : "none";
         } else if (isHost) updateDoc(doc(db, "rooms", roomCode), { status: "voting" });
@@ -247,7 +403,7 @@ async function startGame() {
         status: "playing", users: participants, currentRound: 1, answers: [], revealIndex: 0, timeLeft: latestRoomData.timeLimit, voteCount: 0,
         odai: nextOdai.text, usedOdaiIndices: nextOdai.newUsedIndices, allAnswersHistory: []
     });
-    startTimer(latestRoomData.timeLimit);
+    setTimeout(() => { if (isHost && latestRoomData.status === "playing") startTimer(latestRoomData.timeLimit); }, 4000);
 }
 function startTimer(duration) {
     if (timerInterval) clearInterval(timerInterval);
@@ -275,7 +431,7 @@ function renderVoteList(data) {
 }
 function renderFinalResults(data) {
     const list = document.getElementById("result-list"); const sorted = [...data.users].sort((a,b) => (b.totalScore || 0) - (a.totalScore || 0));
-    list.innerHTML = sorted.map((u, i) => `<div class="result-item"><strong>${i+1}位 (${u.totalScore || 0}pt):</strong> ${renderIcon(u.icon)} ${escapeHTML(u.name.substring(0, 10))}${u.id === myId ? ' (あなた)' : ''} ${u.isExited ? '<small>(退出済)</small>' : ''}</div>`).join("");
+    list.innerHTML = sorted.map((u, i) => `<div class=\"result-item\"><strong>${i+1}位 (${u.totalScore || 0}pt):</strong> ${renderIcon(u.icon)} ${escapeHTML(u.name.substring(0, 10))}${u.id === myId ? ' (あなた)' : ''} ${u.isExited ? '<small>(退出済)</small>' : ''}</div>`).join("");
     const history = data.allAnswersHistory || [];
     if (history.length > 0) {
         const maxVotes = Math.max(...history.map(a => a.votes));
@@ -295,7 +451,7 @@ async function processVoteEnd(data) {
     if (data.currentRound < data.totalRounds) {
         const nextOdai = pickUniqueOdai(data.usedOdaiIndices || []);
         await updateDoc(doc(db, "rooms", roomCode), { status: "playing", users: updatedUsers, currentRound: data.currentRound + 1, answers: [], revealIndex: 0, voteCount: 0, timeLeft: data.timeLimit, odai: nextOdai.text, usedOdaiIndices: nextOdai.newUsedIndices, allAnswersHistory: updatedHistory });
-        startTimer(data.timeLimit);
+        setTimeout(() => { if (isHost && latestRoomData.status === "playing") startTimer(data.timeLimit); }, 4000);
     } else await updateDoc(doc(db, "rooms", roomCode), { status: "result", users: updatedUsers, allAnswersHistory: updatedHistory });
 }
 function shareToX() {
@@ -303,7 +459,12 @@ function shareToX() {
     let shareText = `【with!大喜利】結果発表！\n`; if (mvpAnswer && mvpAnswer !== "...") shareText += `🏆今回のMVP回答：${mvpAnswer}\n（${mvpOdai}）\n\n`;
     shareText += `#with大喜利\n`; const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent("https://zetsubouinu.github.io/ZetsubouInu/")}`; window.open(xUrl, '_blank');
 }
-async function goBackToWait() { currentLocalScreen = "wait"; const updated = latestRoomData.users.map(u => u.id === myId ? {...u, isReady: false, isExited: false} : u); await updateDoc(doc(db, "rooms", roomCode), { users: updated, status: "waiting" }); }
+async function goBackToWait() { 
+    currentLocalScreen = "wait"; updateUI(latestRoomData); playedCountdownRounds = []; 
+    const updatedUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, isReady: false, isExited: false } : u);
+    const updateData = { users: updatedUsers }; if (isHost) updateData.status = "waiting";
+    await updateDoc(doc(db, "rooms", roomCode), updateData); 
+}
 async function exitGame() { if (latestRoomData) { const updatedUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, isExited: true, isReady: false } : u); await updateDoc(doc(db, "rooms", roomCode), { users: updatedUsers }); } location.reload(); }
 async function sendStamp(type) {
     const newUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, lastReaction: type, reactionTime: Date.now() } : u); const updateFields = { users: newUsers };
@@ -317,4 +478,4 @@ async function sendStamp(type) {
     await updateDoc(doc(db, "rooms", roomCode), updateFields);
 }
 function copyRoomCode() { if (!roomCode) return; navigator.clipboard.writeText(roomCode).then(() => { const toast = document.getElementById("copy-toast"); toast.className = "show"; setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 2000); }); }
-function toggleRoomCode() { const display = document.getElementById("display-code"); display.innerText = (display.innerText === "*****") ? roomCode : "*****"; display.style.background = (display.innerText === "*****") ? "#eee" : "transparent"; }
+function toggleRoomCode() { const display = document.getElementById("display-code"); display.innerText = (display.innerText === "*****") ? roomCode : "*****"; }
