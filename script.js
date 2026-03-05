@@ -30,6 +30,9 @@ const reactionSound = new Audio("reaction.mp3");
 const limitSound = new Audio("limit10.mp3");
 limitSound.loop = true; 
 
+// 🌟 カウントダウンボイスの読み込み（ループ無し）
+const voiceCountdown = new Audio("321voice.mp3");
+
 const bgmMain = new Audio("bgm_main.mp3");
 bgmMain.loop = true; 
 bgmMain.volume = 0;  
@@ -38,14 +41,13 @@ const bgmBattle = new Audio("bgm_battle.mp3");
 bgmBattle.loop = true;
 bgmBattle.volume = 0;
 
-// 🌟 新しい発表・投票用BGMの追加
 const bgmVote = new Audio("bgm_vote.mp3");
 bgmVote.loop = true;
 bgmVote.volume = 0;
 
 let isMainBgmPlaying = false;
 let isBattleBgmPlaying = false;
-let isVoteBgmPlaying = false; // 🌟 投票BGMのフラグを追加
+let isVoteBgmPlaying = false; 
 let hasUserInteracted = false;
 let isCountdownActive = false; 
 
@@ -82,7 +84,6 @@ function fadeAudio(audio, targetScreenFactor, duration) {
     }, stepTime);
 }
 
-// 🌟 BGMの切り替えロジックを刷新
 function manageBgm(screen) {
     if (!hasUserInteracted) return;
     
@@ -91,7 +92,6 @@ function manageBgm(screen) {
     const voteBgmScreens = ["revealing", "voting"];
 
     if (mainBgmScreens.includes(screen)) {
-        // ホーム・待機・結果発表
         isMainBgmPlaying = true;
         isBattleBgmPlaying = false;
         isVoteBgmPlaying = false;
@@ -100,38 +100,33 @@ function manageBgm(screen) {
         fadeAudio(bgmVote, 0, 1000);
     } 
     else if (battleBgmScreens.includes(screen)) {
-        // 回答中（playing）
         isMainBgmPlaying = false;
         isBattleBgmPlaying = !isCountdownActive; 
         isVoteBgmPlaying = false;
         fadeAudio(bgmMain, 0, 1000); 
-        fadeAudio(bgmVote, 0, 1000); // 前のラウンドの投票BGMをフェードアウト
+        fadeAudio(bgmVote, 0, 1000); 
 
         if (isCountdownActive) {
-            // ラウンド開始前の「3, 2, 1」中はフェードアウト（無音）
             fadeAudio(bgmBattle, 0, 500); 
         } else {
-            // 「START!」が出たらバトルBGMフェードイン
             fadeAudio(bgmBattle, 1, 1000);
         }
     } 
     else if (screen === "reveal_standby") {
-        // 「回答発表！」の幕が出ている間はすべてフェードアウト
         isMainBgmPlaying = false;
         isBattleBgmPlaying = false;
         isVoteBgmPlaying = false;
         fadeAudio(bgmMain, 0, 1000);
-        fadeAudio(bgmBattle, 0, 1000); // バトルBGMがここでフェードアウト
+        fadeAudio(bgmBattle, 0, 1000); 
         fadeAudio(bgmVote, 0, 1000);
     } 
     else if (voteBgmScreens.includes(screen)) {
-        // 発表・投票画面
         isMainBgmPlaying = false;
         isBattleBgmPlaying = false;
         isVoteBgmPlaying = true;
         fadeAudio(bgmMain, 0, 1000);
         fadeAudio(bgmBattle, 0, 1000);
-        fadeAudio(bgmVote, 1, 1000); // 幕が明けて投票BGMがフェードイン
+        fadeAudio(bgmVote, 1, 1000); 
     }
 }
 
@@ -174,6 +169,13 @@ function showCountdown() {
     
     isCountdownActive = true;
     manageBgm(currentLocalScreen); 
+
+    // 🌟 「3」が表示されるタイミングでカウントダウンボイスを再生
+    if (hasUserInteracted) {
+        voiceCountdown.volume = seFactor * BASE_SE_VOLUME;
+        voiceCountdown.currentTime = 0; // 最初から再生
+        voiceCountdown.play().catch(e => console.log("再生ブロック:", e));
+    }
 
     let count = 3;
     textEl.innerText = count;
@@ -276,7 +278,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (bgmBattle.fadeInterval) { clearInterval(bgmBattle.fadeInterval); bgmBattle.fadeInterval = null; }
                 bgmBattle.volume = bgmFactor * BASE_BGM_VOLUME;
             }
-            // 🌟 投票BGMのシークバー連動を追加
             if (isVoteBgmPlaying) {
                 if (bgmVote.fadeInterval) { clearInterval(bgmVote.fadeInterval); bgmVote.fadeInterval = null; }
                 bgmVote.volume = bgmFactor * BASE_BGM_VOLUME;
@@ -293,6 +294,10 @@ document.addEventListener("DOMContentLoaded", () => {
             seFactor = parseFloat(e.target.value); 
             if (!limitSound.paused) {
                 limitSound.volume = seFactor * BASE_SE_VOLUME;
+            }
+            // 🌟 再生中のボイスの音量もリアルタイムで反映
+            if (!voiceCountdown.paused) {
+                voiceCountdown.volume = seFactor * BASE_SE_VOLUME;
             }
         });
         seSlider.addEventListener("change", (e) => {
