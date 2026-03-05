@@ -21,33 +21,48 @@ let currentLocalScreen = "home", lastKnownReactionTimes = {}, isProcessingAction
 let currentRevealingAnswerIndex = -1;
 let typeWriterTimer = null;
 let playedCountdownRounds = []; 
+let playedRevealRounds = []; 
 
 const icons = ['🐱', '🐶', '🦊', '🐈', '🐯', '🦁', '🐰', '🐻'];
 
 // --- 🌟 効果音・BGMの読み込みと設定 ---
 const reactionSound = new Audio("reaction.mp3");
+const limitSound = new Audio("limit10.mp3");
+limitSound.loop = true; 
+
 const bgmMain = new Audio("bgm_main.mp3");
 bgmMain.loop = true; 
 bgmMain.volume = 0;  
 
-let isMainBgmPlaying = false;
-let hasUserInteracted = false;
-let fadeInterval = null;
+const bgmBattle = new Audio("bgm_battle.mp3");
+bgmBattle.loop = true;
+bgmBattle.volume = 0;
 
-// ゲームとしての「適正な最大音量」を裏側で固定
+// 🌟 新しい発表・投票用BGMの追加
+const bgmVote = new Audio("bgm_vote.mp3");
+bgmVote.loop = true;
+bgmVote.volume = 0;
+
+let isMainBgmPlaying = false;
+let isBattleBgmPlaying = false;
+let isVoteBgmPlaying = false; // 🌟 投票BGMのフラグを追加
+let hasUserInteracted = false;
+let isCountdownActive = false; 
+
 const BASE_BGM_VOLUME = 0.3; 
 const BASE_SE_VOLUME = 0.6; 
 
-// ユーザーが設定したシークバーの割合（初期値は1＝100%）
-let bgmFactor = 1.0; 
-let seFactor = 1.0; 
+let bgmFactor = 0.4; 
+let seFactor = 0.4; 
 
 function fadeAudio(audio, targetScreenFactor, duration) {
-    if (fadeInterval) clearInterval(fadeInterval);
+    if (audio.fadeInterval) {
+        clearInterval(audio.fadeInterval);
+        audio.fadeInterval = null;
+    }
     const steps = 30;
     const stepTime = duration / steps;
     
-    // 目標音量 = (ON/OFF) × (シークバーの割合) × (適正な最大音量)
     const targetActualVol = targetScreenFactor * bgmFactor * BASE_BGM_VOLUME;
     const volStep = (targetActualVol - audio.volume) / steps;
 
@@ -55,31 +70,68 @@ function fadeAudio(audio, targetScreenFactor, duration) {
         audio.play().catch(e => console.log("再生ブロック:", e));
     }
 
-    fadeInterval = setInterval(() => {
+    audio.fadeInterval = setInterval(() => {
         let newVol = audio.volume + volStep;
         if ((volStep > 0 && newVol >= targetActualVol) || (volStep < 0 && newVol <= targetActualVol)) {
             newVol = targetActualVol;
-            clearInterval(fadeInterval);
-            fadeInterval = null;
+            clearInterval(audio.fadeInterval);
+            audio.fadeInterval = null;
             if (targetActualVol === 0) audio.pause();
         }
         audio.volume = Math.max(0, Math.min(1, newVol));
     }, stepTime);
 }
 
+// 🌟 BGMの切り替えロジックを刷新
 function manageBgm(screen) {
     if (!hasUserInteracted) return;
+    
     const mainBgmScreens = ["home", "wait", "result"];
+    const battleBgmScreens = ["playing"];
+    const voteBgmScreens = ["revealing", "voting"];
+
     if (mainBgmScreens.includes(screen)) {
-        if (!isMainBgmPlaying) {
-            isMainBgmPlaying = true;
-            fadeAudio(bgmMain, 1, 1000); 
+        // ホーム・待機・結果発表
+        isMainBgmPlaying = true;
+        isBattleBgmPlaying = false;
+        isVoteBgmPlaying = false;
+        fadeAudio(bgmMain, 1, 1000); 
+        fadeAudio(bgmBattle, 0, 1000); 
+        fadeAudio(bgmVote, 0, 1000);
+    } 
+    else if (battleBgmScreens.includes(screen)) {
+        // 回答中（playing）
+        isMainBgmPlaying = false;
+        isBattleBgmPlaying = !isCountdownActive; 
+        isVoteBgmPlaying = false;
+        fadeAudio(bgmMain, 0, 1000); 
+        fadeAudio(bgmVote, 0, 1000); // 前のラウンドの投票BGMをフェードアウト
+
+        if (isCountdownActive) {
+            // ラウンド開始前の「3, 2, 1」中はフェードアウト（無音）
+            fadeAudio(bgmBattle, 0, 500); 
+        } else {
+            // 「START!」が出たらバトルBGMフェードイン
+            fadeAudio(bgmBattle, 1, 1000);
         }
-    } else {
-        if (isMainBgmPlaying) {
-            isMainBgmPlaying = false;
-            fadeAudio(bgmMain, 0, 1500); 
-        }
+    } 
+    else if (screen === "reveal_standby") {
+        // 「回答発表！」の幕が出ている間はすべてフェードアウト
+        isMainBgmPlaying = false;
+        isBattleBgmPlaying = false;
+        isVoteBgmPlaying = false;
+        fadeAudio(bgmMain, 0, 1000);
+        fadeAudio(bgmBattle, 0, 1000); // バトルBGMがここでフェードアウト
+        fadeAudio(bgmVote, 0, 1000);
+    } 
+    else if (voteBgmScreens.includes(screen)) {
+        // 発表・投票画面
+        isMainBgmPlaying = false;
+        isBattleBgmPlaying = false;
+        isVoteBgmPlaying = true;
+        fadeAudio(bgmMain, 0, 1000);
+        fadeAudio(bgmBattle, 0, 1000);
+        fadeAudio(bgmVote, 1, 1000); // 幕が明けて投票BGMがフェードイン
     }
 }
 
@@ -119,6 +171,10 @@ function showCountdown() {
     const textEl = document.getElementById("countdown-text");
     if (!overlay || !textEl) return;
     overlay.style.display = "flex";
+    
+    isCountdownActive = true;
+    manageBgm(currentLocalScreen); 
+
     let count = 3;
     textEl.innerText = count;
     textEl.classList.remove("countdown-anim");
@@ -130,11 +186,50 @@ function showCountdown() {
             textEl.classList.remove("countdown-anim");
             void textEl.offsetWidth; textEl.classList.add("countdown-anim");
         } else if (count === 0) {
+            textEl.style.fontSize = "15vw"; 
             textEl.innerText = "START!";
             textEl.classList.remove("countdown-anim");
             void textEl.offsetWidth; textEl.classList.add("countdown-anim");
-        } else { clearInterval(interval); overlay.style.display = "none"; }
+        } else { 
+            clearInterval(interval); 
+            overlay.style.display = "none"; 
+            textEl.style.fontSize = "180px"; 
+            
+            isCountdownActive = false;
+            manageBgm(currentLocalScreen);
+        }
     }, 1000);
+}
+
+function showAnnouncement(text) {
+    const overlay = document.getElementById("countdown-overlay");
+    const textEl = document.getElementById("countdown-text");
+    if (!overlay || !textEl) return;
+    overlay.style.display = "flex";
+    
+    isCountdownActive = true; 
+    manageBgm(currentLocalScreen);
+
+    textEl.style.fontSize = text.length > 3 ? "15vw" : "180px"; 
+    textEl.style.fontFamily = "'Rampart One', sans-serif";
+    textEl.innerText = text;
+    textEl.classList.remove("countdown-anim");
+    void textEl.offsetWidth; 
+    textEl.classList.add("countdown-anim");
+
+    textEl.style.animationDuration = "2s";
+    textEl.style.animationFillMode = "forwards";
+
+    setTimeout(() => {
+        overlay.style.display = "none";
+        textEl.style.fontSize = "180px";
+        textEl.style.fontFamily = "";
+        textEl.style.animationDuration = "";
+        textEl.style.animationFillMode = "";
+        
+        isCountdownActive = false; 
+        manageBgm(currentLocalScreen);
+    }, 2000); 
 }
 
 function escapeHTML(str) { if (!str) return ""; return str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m])); }
@@ -149,13 +244,11 @@ function pickUniqueOdai(usedIndices) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    // 🌟 シークバーの背景色（黄色とグレーの割合）をツマミに合わせて塗る関数
     function updateSliderBg(slider) {
         const val = (slider.value - slider.min) / (slider.max - slider.min) * 100;
         slider.style.background = `linear-gradient(to right, #ffd700 ${val}%, #ddd ${val}%)`;
     }
 
-    // パネル開閉
     const toggleBtn = document.getElementById("volume-toggle-btn");
     const panel = document.getElementById("volume-panel");
     if (toggleBtn && panel) {
@@ -170,12 +263,23 @@ document.addEventListener("DOMContentLoaded", () => {
     const bgmSlider = document.getElementById("bgm-volume");
     if (bgmSlider) {
         bgmSlider.value = bgmFactor; 
-        updateSliderBg(bgmSlider); // 🌟 初期状態の背景色を適用
+        updateSliderBg(bgmSlider); 
         bgmSlider.addEventListener("input", (e) => {
-            updateSliderBg(e.target); // 🌟 ツマミを動かすたびに色を塗り直す
+            updateSliderBg(e.target); 
             bgmFactor = parseFloat(e.target.value); 
-            if (isMainBgmPlaying && !fadeInterval) {
+            
+            if (isMainBgmPlaying) {
+                if (bgmMain.fadeInterval) { clearInterval(bgmMain.fadeInterval); bgmMain.fadeInterval = null; }
                 bgmMain.volume = bgmFactor * BASE_BGM_VOLUME;
+            }
+            if (isBattleBgmPlaying) {
+                if (bgmBattle.fadeInterval) { clearInterval(bgmBattle.fadeInterval); bgmBattle.fadeInterval = null; }
+                bgmBattle.volume = bgmFactor * BASE_BGM_VOLUME;
+            }
+            // 🌟 投票BGMのシークバー連動を追加
+            if (isVoteBgmPlaying) {
+                if (bgmVote.fadeInterval) { clearInterval(bgmVote.fadeInterval); bgmVote.fadeInterval = null; }
+                bgmVote.volume = bgmFactor * BASE_BGM_VOLUME;
             }
         });
     }
@@ -183,10 +287,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const seSlider = document.getElementById("se-volume");
     if (seSlider) {
         seSlider.value = seFactor; 
-        updateSliderBg(seSlider); // 🌟 初期状態の背景色を適用
+        updateSliderBg(seSlider); 
         seSlider.addEventListener("input", (e) => { 
-            updateSliderBg(e.target); // 🌟 ツマミを動かすたびに色を塗り直す
+            updateSliderBg(e.target); 
             seFactor = parseFloat(e.target.value); 
+            if (!limitSound.paused) {
+                limitSound.volume = seFactor * BASE_SE_VOLUME;
+            }
         });
         seSlider.addEventListener("change", (e) => {
             const playSound = reactionSound.cloneNode();
@@ -258,6 +365,7 @@ async function createRoom() {
     myName = document.getElementById("name-input").value.substring(0, 10) || "名無し";
     myId = generateId(); isHost = true; currentLocalScreen = "wait";
     playedCountdownRounds = []; 
+    playedRevealRounds = []; 
     await setDoc(doc(db, "rooms", roomCode), {
         status: "waiting", users: [{ id: myId, name: myName, icon: myIcon, isReady: false, lastReaction: "", reactionTime: 0, totalScore: 0, isExited: false }], 
         hostId: myId, originalHostId: myId, odai: "", usedOdaiIndices: [], answers: [], revealIndex: 0, timeLeft: 60, voteCount: 0,
@@ -280,6 +388,7 @@ async function joinRoom() {
     myName = document.getElementById("name-input").value.substring(0, 10) || "ゲスト";
     myId = generateId(); isHost = false; currentLocalScreen = "wait";
     playedCountdownRounds = []; 
+    playedRevealRounds = []; 
     await updateDoc(roomRef, { users: arrayUnion({ id: myId, name: myName, icon: myIcon, isReady: false, lastReaction: "", reactionTime: 0, totalScore: 0, isExited: false }) });
     setupRoomListener();
 }
@@ -295,9 +404,10 @@ function setupRoomListener() {
             return;
         }
         isHost = (latestRoomData.hostId === myId);
+        
         if (latestRoomData.status === "waiting") {
             if (currentLocalScreen !== "home" && currentLocalScreen !== "result") currentLocalScreen = "wait";
-        } else if (["playing", "revealing", "voting"].includes(latestRoomData.status)) {
+        } else if (["playing", "reveal_standby", "revealing", "voting"].includes(latestRoomData.status)) {
             currentLocalScreen = latestRoomData.status;
         } else if (latestRoomData.status === "result") {
             if (currentLocalScreen !== "home" && currentLocalScreen !== "wait") currentLocalScreen = "result";
@@ -307,7 +417,20 @@ function setupRoomListener() {
 }
 
 function updateUI(data) {
+    if (currentLocalScreen === "playing" && !playedCountdownRounds.includes(data.currentRound)) {
+        playedCountdownRounds.push(data.currentRound);
+        showCountdown();
+    }
+
     manageBgm(currentLocalScreen);
+    
+    if (currentLocalScreen !== "playing") {
+        if (!limitSound.paused) {
+            limitSound.pause();
+            limitSound.currentTime = 0; 
+        }
+    }
+
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     const activeUsers = data.users.filter(u => !u.isExited);
     const bottomBar = document.getElementById("bottom-users");
@@ -319,7 +442,7 @@ function updateUI(data) {
             bottomBar.dataset.signature = currentSignature;
             bottomBar.innerHTML = activeUsers.map(u => {
                 const hasAnswered = data.answers && data.answers.some(a => a.userId === u.id);
-                const checkMark = (currentLocalScreen === "playing" && hasAnswered) ? `<div style=\"position:absolute; top:-5px; right:-5px; background:white; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; border:2px solid #1a1a1a; z-index:10; font-size:12px; box-shadow:0 2px 5px rgba(0,0,0,0.2);\">✅</div>` : "";
+                const checkMark = ((currentLocalScreen === "playing" || currentLocalScreen === "reveal_standby") && hasAnswered) ? `<div style=\"position:absolute; top:-5px; right:-5px; background:white; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; border:2px solid #1a1a1a; z-index:10; font-size:12px; box-shadow:0 2px 5px rgba(0,0,0,0.2);\">✅</div>` : "";
                 return `<div class=\"user-icon-stack\" id=\"stack-${u.id}\" style=\"position:relative;\">${checkMark}<div class=\"bubble\" id=\"bubble-${u.id}\"></div><div class=\"icon\">${renderIcon(u.icon)}</div><div>${escapeHTML(u.name.substring(0, 10))}${u.id === myId ? '<br>(あなた)' : ''}</div></div>`;
             }).join("");
         }
@@ -337,7 +460,8 @@ function updateUI(data) {
         });
     } else { bottomBar.style.display = "none"; }
 
-    const activeScreen = document.getElementById(`screen-${currentLocalScreen}`);
+    const activeScreenId = currentLocalScreen === "reveal_standby" ? "playing" : currentLocalScreen;
+    const activeScreen = document.getElementById(`screen-${activeScreenId}`);
     if (activeScreen) activeScreen.classList.add("active");
 
     if (currentLocalScreen === "wait") {
@@ -367,15 +491,42 @@ function updateUI(data) {
     } 
     else if (currentLocalScreen === "playing") {
         isProcessingAction = false; hasVoted = false; currentRevealingAnswerIndex = -1; 
-        if (!playedCountdownRounds.includes(data.currentRound)) { playedCountdownRounds.push(data.currentRound); showCountdown(); }
+        
         document.getElementById("round-display").innerText = `第 ${data.currentRound} / ${data.totalRounds} ラウンド`;
         document.getElementById("current-odai").innerText = data.odai;
-        document.getElementById("timer-display").innerText = `残り ${data.timeLeft}秒`;
+        
+        const timerDisplay = document.getElementById("timer-display");
+        timerDisplay.innerText = `残り ${data.timeLeft}秒`;
+        
+        if (data.timeLeft <= 10 && data.timeLeft > 0) {
+            timerDisplay.style.color = "red"; 
+            if (limitSound.paused && hasUserInteracted) {
+                limitSound.volume = seFactor * BASE_SE_VOLUME; 
+                limitSound.play().catch(e => console.log("再生ブロック:", e));
+            }
+        } else {
+            timerDisplay.style.color = "#1a1a1a"; 
+        }
+
         const sent = data.answers.some(a => a.userId === myId);
         document.getElementById("submit-btn").disabled = sent;
         document.getElementById("playing-wait-msg").style.display = sent ? "block" : "none";
         if (isHost && (data.answers.length >= activeUsers.length || data.timeLeft <= 0)) goToReveal();
     } 
+    else if (currentLocalScreen === "reveal_standby") {
+        document.getElementById("round-display").innerText = `第 ${data.currentRound} / ${data.totalRounds} ラウンド`;
+        document.getElementById("current-odai").innerText = data.odai;
+        const timerDisplay = document.getElementById("timer-display");
+        timerDisplay.innerText = `終了！`;
+        timerDisplay.style.color = "red";
+        
+        document.getElementById("submit-btn").disabled = true;
+        
+        if (!playedRevealRounds.includes(data.currentRound)) {
+            playedRevealRounds.push(data.currentRound);
+            showAnnouncement("回答発表！");
+        }
+    }
     else if (currentLocalScreen === "revealing") {
         document.getElementById("revealing-odai").innerText = `お題：${data.odai}`;
         const ans = data.answers && data.answers.length > 0 ? data.answers[data.revealIndex] : null;
@@ -405,18 +556,36 @@ async function startGame() {
     });
     setTimeout(() => { if (isHost && latestRoomData.status === "playing") startTimer(latestRoomData.timeLimit); }, 4000);
 }
+
 function startTimer(duration) {
     if (timerInterval) clearInterval(timerInterval);
     let time = duration;
     timerInterval = setInterval(() => { time--; if (isHost) updateDoc(doc(db, "rooms", roomCode), { timeLeft: time }); if (time <= 0) { clearInterval(timerInterval); if (isHost) goToReveal(); } }, 1000);
 }
+
 async function submitAnswer() {
     const text = document.getElementById("my-answer").value; if(!text || isProcessingAction) return;
     isProcessingAction = true; document.getElementById("submit-btn").disabled = true;
     await updateDoc(doc(db, "rooms", roomCode), { answers: arrayUnion({ userId: myId, userName: myName, text: text, votes: 0, reactions: 0 }) });
     document.getElementById("my-answer").value = "";
 }
-async function goToReveal() { if (timerInterval) clearInterval(timerInterval); if (!isHost) return; const currentAnswers = latestRoomData.answers || []; if (currentAnswers.length === 0) processVoteEnd(latestRoomData); else await updateDoc(doc(db, "rooms", roomCode), { status: "revealing", revealIndex: 0 }); }
+
+async function goToReveal() { 
+    if (timerInterval) clearInterval(timerInterval); 
+    if (!isHost) return; 
+    const currentAnswers = latestRoomData.answers || []; 
+    if (currentAnswers.length === 0) {
+        processVoteEnd(latestRoomData); 
+    } else { 
+        await updateDoc(doc(db, "rooms", roomCode), { status: "reveal_standby" });
+        setTimeout(() => {
+            if (isHost && latestRoomData.status === "reveal_standby") {
+                updateDoc(doc(db, "rooms", roomCode), { status: "revealing", revealIndex: 0 }); 
+            }
+        }, 2000);
+    } 
+}
+
 async function nextReveal() { await updateDoc(doc(db, "rooms", roomCode), { revealIndex: latestRoomData.revealIndex + 1 }); }
 function renderVoteList(data) {
     const list = document.getElementById("vote-list"); list.innerHTML = ""; const activeUsers = data.users.filter(u => !u.isExited);
@@ -460,7 +629,11 @@ function shareToX() {
     shareText += `#with大喜利\n`; const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent("https://zetsubouinu.github.io/ZetsubouInu/")}`; window.open(xUrl, '_blank');
 }
 async function goBackToWait() { 
-    currentLocalScreen = "wait"; updateUI(latestRoomData); playedCountdownRounds = []; 
+    currentLocalScreen = "wait"; 
+    playedCountdownRounds = []; 
+    playedRevealRounds = []; 
+    isCountdownActive = false; 
+    updateUI(latestRoomData); 
     const updatedUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, isReady: false, isExited: false } : u);
     const updateData = { users: updatedUsers }; if (isHost) updateData.status = "waiting";
     await updateDoc(doc(db, "rooms", roomCode), updateData); 
