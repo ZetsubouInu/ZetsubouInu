@@ -1,5 +1,4 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-// 🌟 deleteDoc をインポートに追加しました
 import { getFirestore, doc, setDoc, onSnapshot, updateDoc, arrayUnion, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { odaiList } from "./odai.js";
 
@@ -30,7 +29,8 @@ const icons = ['🐱', '🐶', '🦊', '🐈', '🐯', '🦁', '🐰', '🐻'];
 // --- 🌟 効果音・BGMの読み込みと設定 ---
 const reactionSound = new Audio("reaction.mp3");
 const limitSound = new Audio("limit10.mp3");
-limitSound.loop = true; 
+limitSound.loop = false; 
+let isLimitSoundPlayed = false;
 
 const voiceCountdown = new Audio("321voice.mp3");
 
@@ -405,10 +405,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const myAnswerInput = document.getElementById("my-answer");
     if (myAnswerInput) myAnswerInput.addEventListener("keydown", (e) => handleEnter(e, "submit-btn"));
 
-    // ルームコード入力欄でのエンター送信を削除しました
-    // const roomInput = document.getElementById("room-input");
-    // if (roomInput) roomInput.addEventListener("keydown", (e) => handleEnter(e, "join-room-btn"));
-
     document.getElementById("create-room-btn").onclick = createRoom;
     document.getElementById("join-room-btn").onclick = joinRoom;
     document.getElementById("ready-btn").onclick = toggleReady;
@@ -425,10 +421,20 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("time-select").onchange = (e) => updateRoomSettings('timeLimit', e.target.value);
 });
 
+// 🌟 ブラウザを閉じた時（またはリロードした時）の処理
 window.addEventListener("beforeunload", () => {
     if (roomCode && myId && latestRoomData) {
-        const updatedUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, isExited: true, isReady: false } : u);
-        updateDoc(doc(db, "rooms", roomCode), { users: updatedUsers });
+        // 自分以外の「現在参加中のユーザー」が何人いるか確認
+        const activeOthers = latestRoomData.users.filter(u => u.id !== myId && !u.isExited);
+        
+        if (activeOthers.length === 0) {
+            // 🌟 自分が最後の一人なら、部屋ごと完全に削除する！
+            deleteDoc(doc(db, "rooms", roomCode));
+        } else {
+            // 🌟 他に人がいるなら、自分だけ退出状態にする
+            const updatedUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, isExited: true, isReady: false } : u);
+            updateDoc(doc(db, "rooms", roomCode), { users: updatedUsers });
+        }
     }
 });
 
@@ -439,17 +445,12 @@ async function createRoom() {
     myId = generateId(); isHost = true; currentLocalScreen = "wait";
     playedCountdownRounds = []; 
     playedRevealRounds = []; 
-    
-    // 🌟 24時間後の時間を計算（TTL用）
-    const expireTime = new Date();
-    expireTime.setHours(expireTime.getHours() + 24);
 
     await setDoc(doc(db, "rooms", roomCode), {
         status: "waiting", 
         users: [{ id: myId, name: myName, icon: myIcon, isReady: false, lastReaction: "", reactionTime: 0, totalScore: 0, isExited: false }], 
         hostId: myId, originalHostId: myId, odai: "", usedOdaiIndices: [], answers: [], revealIndex: 0, timeLeft: 60, voteCount: 0,
-        currentRound: 0, totalRounds: 3, maxUsers: 8, timeLimit: 60, allAnswersHistory: [],
-        expiresAt: expireTime // 🌟 有効期限データを保存
+        currentRound: 0, totalRounds: 3, maxUsers: 8, timeLimit: 60, allAnswersHistory: []
     });
     setupRoomListener();
 }
@@ -480,6 +481,7 @@ function setupRoomListener() {
         latestRoomData = docSnap.data();
         const activeUsers = latestRoomData.users.filter(u => !u.isExited);
         const currentHost = activeUsers.find(u => u.id === latestRoomData.hostId);
+        // 🌟 ホストが退出した場合、残っているメンバーの一番最初の人が自動的にホストになります
         if (!currentHost && activeUsers.length > 0) {
             await updateDoc(doc(db, "rooms", roomCode), { hostId: activeUsers[0].id });
             return;
@@ -506,10 +508,9 @@ function updateUI(data) {
     manageBgm(currentLocalScreen);
     
     if (currentLocalScreen !== "playing") {
-        if (!limitSound.paused) {
-            limitSound.pause();
-            limitSound.currentTime = 0; 
-        }
+        isLimitSoundPlayed = false;
+        limitSound.pause();
+        limitSound.currentTime = 0; 
     }
 
     if (currentLocalScreen !== "revealing" && revealCountdownTimer) {
@@ -592,8 +593,10 @@ function updateUI(data) {
         
         if (data.timeLeft <= 10 && data.timeLeft > 0) {
             timerDisplay.style.color = "red"; 
-            if (limitSound.paused && hasUserInteracted) {
+            if (!isLimitSoundPlayed && hasUserInteracted) {
+                isLimitSoundPlayed = true; 
                 limitSound.volume = seFactor * BASE_SE_VOLUME; 
+                limitSound.currentTime = 0;
                 limitSound.play().catch(e => console.log("再生ブロック:", e));
             }
         } else {
@@ -768,20 +771,25 @@ async function goBackToWait() {
     const updateData = { users: updatedUsers }; if (isHost) updateData.status = "waiting";
     await updateDoc(doc(db, "rooms", roomCode), updateData); 
 }
+
+// 🌟 ボタンで退出する際の処理
 async function exitGame() { 
     playButtonSound(); 
     if (latestRoomData) { 
-        // 🌟 ホストが退出ボタンを押した場合は部屋のデータを丸ごと削除する
-        if (isHost) {
+        const activeOthers = latestRoomData.users.filter(u => u.id !== myId && !u.isExited);
+        
+        if (activeOthers.length === 0) {
+            // 🌟 自分が最後の一人なら、部屋ごと完全に削除する！
             await deleteDoc(doc(db, "rooms", roomCode));
         } else {
-            // ゲストの場合は自分を退出済みにするだけ
+            // 🌟 他に人がいるなら、自分だけ退出状態にする
             const updatedUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, isExited: true, isReady: false } : u); 
             await updateDoc(doc(db, "rooms", roomCode), { users: updatedUsers }); 
         }
     } 
     location.reload(); 
 }
+
 async function sendStamp(type) {
     const newUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, lastReaction: type, reactionTime: Date.now() } : u); const updateFields = { users: newUsers };
     if (latestRoomData.status === "revealing") {
