@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getFirestore, doc, setDoc, onSnapshot, updateDoc, arrayUnion, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+// 🌟 deleteDoc をインポートに追加しました
+import { getFirestore, doc, setDoc, onSnapshot, updateDoc, arrayUnion, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { odaiList } from "./odai.js";
 
 const firebaseConfig = {
@@ -402,8 +403,11 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     const myAnswerInput = document.getElementById("my-answer");
-    // 🌟 回答入力欄のみエンターキー送信を残す
     if (myAnswerInput) myAnswerInput.addEventListener("keydown", (e) => handleEnter(e, "submit-btn"));
+
+    // ルームコード入力欄でのエンター送信を削除しました
+    // const roomInput = document.getElementById("room-input");
+    // if (roomInput) roomInput.addEventListener("keydown", (e) => handleEnter(e, "join-room-btn"));
 
     document.getElementById("create-room-btn").onclick = createRoom;
     document.getElementById("join-room-btn").onclick = joinRoom;
@@ -435,10 +439,17 @@ async function createRoom() {
     myId = generateId(); isHost = true; currentLocalScreen = "wait";
     playedCountdownRounds = []; 
     playedRevealRounds = []; 
+    
+    // 🌟 24時間後の時間を計算（TTL用）
+    const expireTime = new Date();
+    expireTime.setHours(expireTime.getHours() + 24);
+
     await setDoc(doc(db, "rooms", roomCode), {
-        status: "waiting", users: [{ id: myId, name: myName, icon: myIcon, isReady: false, lastReaction: "", reactionTime: 0, totalScore: 0, isExited: false }], 
+        status: "waiting", 
+        users: [{ id: myId, name: myName, icon: myIcon, isReady: false, lastReaction: "", reactionTime: 0, totalScore: 0, isExited: false }], 
         hostId: myId, originalHostId: myId, odai: "", usedOdaiIndices: [], answers: [], revealIndex: 0, timeLeft: 60, voteCount: 0,
-        currentRound: 0, totalRounds: 3, maxUsers: 8, timeLimit: 60, allAnswersHistory: []
+        currentRound: 0, totalRounds: 3, maxUsers: 8, timeLimit: 60, allAnswersHistory: [],
+        expiresAt: expireTime // 🌟 有効期限データを保存
     });
     setupRoomListener();
 }
@@ -759,7 +770,16 @@ async function goBackToWait() {
 }
 async function exitGame() { 
     playButtonSound(); 
-    if (latestRoomData) { const updatedUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, isExited: true, isReady: false } : u); await updateDoc(doc(db, "rooms", roomCode), { users: updatedUsers }); } 
+    if (latestRoomData) { 
+        // 🌟 ホストが退出ボタンを押した場合は部屋のデータを丸ごと削除する
+        if (isHost) {
+            await deleteDoc(doc(db, "rooms", roomCode));
+        } else {
+            // ゲストの場合は自分を退出済みにするだけ
+            const updatedUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, isExited: true, isReady: false } : u); 
+            await updateDoc(doc(db, "rooms", roomCode), { users: updatedUsers }); 
+        }
+    } 
     location.reload(); 
 }
 async function sendStamp(type) {
