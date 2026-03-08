@@ -552,7 +552,7 @@ select:disabled {
 }
 
 /* =========================================
-   📱 スマホ用レイアウト調整（Pixel 10対応・修正版）
+   📱 スマホ用レイアウト調整（画面切り替え修正版）
    ========================================= */
 @media screen and (max-width: 768px) {
     /* 1. ページ全体のスクロールを強制的に禁止する */
@@ -560,24 +560,25 @@ select:disabled {
         height: 100dvh !important;
         margin: 0 !important;
         padding: 0 !important;
-        overflow: hidden !important;
+        overflow: hidden !important; /* 絶対にスクロールさせない */
     }
 
-    /* 2. 各画面のコンテナの共通設定（※ここにdisplay:flexを入れるとバグるので外しました） */
+    /* 🌟 2. 非表示の画面は「完全に消す（スペースも取らせない）」 */
     .screen {
+        display: none !important; /* ← これが一番重要です！ */
         height: 100dvh !important;
         padding: 10px !important;
         box-sizing: border-box !important;
         overflow: hidden !important;
-        gap: 8px !important;
     }
 
-    /* 🌟 3. 現在アクティブ（表示中）の画面だけにFlexboxを適用して整列させる */
+    /* 🌟 3. アクティブ（表示中）の画面だけをFlexboxで中央揃えにして表示 */
     .screen.active {
-        display: flex !important;
+        display: flex !important; 
         flex-direction: column !important;
         justify-content: center !important;
         align-items: center !important;
+        gap: 8px !important;
     }
 
     /* 4. タイトルをコンパクトに */
