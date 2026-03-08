@@ -552,80 +552,88 @@ select:disabled {
 }
 
 /* =========================================
-   📱 スマホ用レイアウト調整（画面切り替え修正版）
+   📱 スマホ用レイアウト調整（安全＆1画面フィット設計）
    ========================================= */
 @media screen and (max-width: 768px) {
-    /* 1. ページ全体のスクロールを強制的に禁止する */
-    html, body {
-        height: 100dvh !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: hidden !important; /* 絶対にスクロールさせない */
-    }
-
-    /* 🌟 2. 非表示の画面は「完全に消す（スペースも取らせない）」 */
-    .screen {
-        display: none !important; /* ← これが一番重要です！ */
-        height: 100dvh !important;
+    /* 1. ページ全体の余白を最小限に */
+    body {
         padding: 10px !important;
+        padding-bottom: 70px !important; /* 下部の通知などと被らない程度 */
+    }
+
+    /* 2. 画面の白いパネルをコンパクトに */
+    .screen {
+        padding: 15px !important;
+        border-radius: 20px !important;
+        width: 100% !important;
         box-sizing: border-box !important;
-        overflow: hidden !important;
+        margin-top: 5px !important;
     }
 
-    /* 🌟 3. アクティブ（表示中）の画面だけをFlexboxで中央揃えにして表示 */
-    .screen.active {
-        display: flex !important; 
-        flex-direction: column !important;
-        justify-content: center !important;
-        align-items: center !important;
-        gap: 8px !important;
+    /* 3. ロゴ画像のサイズと余白を詰める */
+    .main-logo {
+        max-height: 80px !important;
+        margin: 0 auto 10px !important;
+        object-fit: contain;
     }
 
-    /* 4. タイトルをコンパクトに */
+    /* 4. タイトルやテキストを少し小さく */
     h1 {
-        font-size: 24px !important;
+        font-size: 22px !important;
         margin: 5px 0 10px 0 !important;
     }
 
-    /* 5. アイコンを2行に折り返して小さくする */
-    #home-icon-selector {
-        display: flex !important;
-        flex-wrap: wrap !important;
-        justify-content: center !important;
+    /* 5. アイコンが右にはみ出ないように縮小（4列×2行に綺麗に収める） */
+    .icon-selector {
         gap: 6px !important;
-        margin-bottom: 5px !important;
-        width: 100% !important;
-        max-width: 320px !important;
+        margin: 10px auto !important;
     }
 
     .icon-option {
-        width: 36px !important;  
-        height: 36px !important;
-        font-size: 20px !important;
-        padding: 2px !important;
+        width: 45px !important;
+        height: 45px !important;
+        font-size: 24px !important;
+        padding: 5px !important;
     }
 
-    /* 6. 入力欄とボタンの高さ・余白を削る */
-    input[type="text"] {
-        font-size: 14px !important;
-        padding: 8px 10px !important;
-        margin-bottom: 2px !important;
-        width: 90% !important;
-        max-width: 300px !important;
+    /* 6. 入力欄とボタンの余白を極限まで削る */
+    input, select {
+        padding: 10px !important;
+        font-size: 16px !important;
+        margin: 5px 0 !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
     }
 
     button {
-        font-size: 14px !important;
-        padding: 10px !important;
-        margin-bottom: 2px !important;
-        width: 90% !important;
-        max-width: 300px !important;
+        padding: 12px 20px !important;
+        font-size: 16px !important;
+        margin-bottom: 5px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
     }
 
-    /* 7. コピーライト（一番下）の調整 */
-    #copyright {
+    /* 7. お題ボックスの縮小 */
+    .odai-box {
+        font-size: 18px !important;
+        padding: 15px !important;
+        margin: 15px 0 !important;
+    }
+
+    .sub-odai-box {
+        font-size: 14px !important;
+        padding: 10px !important;
+        margin-bottom: 10px !important;
+    }
+
+    /* 8. リストとフッターの余白調整 */
+    .user-list {
+        padding: 10px !important;
+        font-size: 14px !important;
+    }
+
+    .footer-text {
+        margin-top: 15px !important;
         font-size: 10px !important;
-        margin-top: auto !important;
-        padding-bottom: 5px !important;
     }
 }
