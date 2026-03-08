@@ -36,7 +36,6 @@ const voiceCountdown = new Audio("321voice.mp3");
 
 const buttonSound = new Audio("button.mp3");
 const voteSound = new Audio("vote.mp3");
-// 🌟 回答発表用の効果音を追加
 const answerSound = new Audio("answer.mp3"); 
 
 const bgmMain = new Audio("bgm_main.mp3");
@@ -62,6 +61,51 @@ const BASE_SE_VOLUME = 0.6;
 
 let bgmFactor = 0.4; 
 let seFactor = 0.4; 
+
+// --- 🌟 固定背景パターンの生成関数（外部SVG読み込み版） ---
+function setFixedBackground() {
+    const existing = document.getElementById("bg-pattern-container");
+    if (existing) existing.remove();
+
+    const bgContainer = document.createElement("div");
+    bgContainer.id = "bg-pattern-container";
+    
+    // 画面全体に固定配置
+    bgContainer.style.position = "fixed";
+    bgContainer.style.top = "0";
+    bgContainer.style.left = "0";
+    bgContainer.style.width = "100vw";
+    bgContainer.style.height = "100vh";
+    bgContainer.style.zIndex = "-1"; // 一番奥
+    bgContainer.style.pointerEvents = "none"; // クリックを貫通させる
+    bgContainer.style.overflow = "hidden";
+    
+    // 背景色（薄黄色）を設定
+    bgContainer.style.backgroundColor = "#fffdf5"; 
+    
+    // 🌟 同階層の pattern.svg を画像として読み込む
+    const bgImage = document.createElement("img");
+    bgImage.src = "pattern.svg";
+    
+    // 画像のスタイル設定
+    bgImage.style.position = "absolute";
+    bgImage.style.top = "50%";
+    bgImage.style.left = "50%";
+    bgImage.style.transform = "translate(-50%, -50%)"; // 常に画面中央に配置
+    
+    // 1920x1080の比率を保ちながら、画面全体を覆うように設定
+    bgImage.style.minWidth = "100vw";
+    bgImage.style.minHeight = "100vh";
+    bgImage.style.width = "100%";
+    bgImage.style.height = "100%";
+    
+    // 🌟 不透明度を30%に指定し、画面をカバー
+    bgImage.style.opacity = "0.3";
+    bgImage.style.objectFit = "cover"; 
+
+    bgContainer.appendChild(bgImage);
+    document.body.appendChild(bgContainer);
+}
 
 function playButtonSound() {
     const playSound = buttonSound.cloneNode();
@@ -239,7 +283,6 @@ function showAnnouncement(text) {
     isCountdownActive = true; 
     manageBgm(currentLocalScreen);
 
-    // 🌟 「回答発表！」のテキストが渡された時に効果音を鳴らす
     if (text === "回答発表！" && hasUserInteracted) {
         answerSound.volume = seFactor * BASE_SE_VOLUME;
         answerSound.currentTime = 0;
@@ -307,6 +350,9 @@ function pickUniqueOdai(usedIndices) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    // 🌟 ページ読み込み時に固定背景をセット（外部の pattern.svg を読み込みます）
+    setFixedBackground();
+
     function updateSliderBg(slider) {
         const val = (slider.value - slider.min) / (slider.max - slider.min) * 100;
         slider.style.background = `linear-gradient(to right, #ffd700 ${val}%, #ddd ${val}%)`;
