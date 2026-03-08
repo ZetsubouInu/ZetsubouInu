@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getFirestore, doc, setDoc, onSnapshot, updateDoc, arrayUnion, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-// 🌟 odai.jsは同じjsフォルダ内なのでそのまま
+// 🌟 odai.jsはimport文なのでJSファイルの場所が基準になります（./のままでOK）
 import { odaiList } from "./odai.js";
 
 const firebaseConfig = {
@@ -27,28 +27,28 @@ let revealCountdownTimer = null;
 
 const icons = ['🐱', '🐶', '🦊', '🐈', '🐯', '🦁', '🐰', '🐻'];
 
-// --- 🌟 効果音・BGMの読み込みと設定（パスを修正） ---
-const reactionSound = new Audio("../assets/audio/se/reaction.mp3");
-const limitSound = new Audio("../assets/audio/se/limit10.mp3");
+// --- 🌟 効果音・BGMの読み込みと設定（HTML基準のパスに修正） ---
+const reactionSound = new Audio("assets/audio/se/reaction.mp3");
+const limitSound = new Audio("assets/audio/se/limit10.mp3");
 limitSound.loop = false; 
 let isLimitSoundPlayed = false;
 
-// ※321voiceのファイル名は構成に合わせて指定しています。実際のファイル名と異なる場合は調整してください
-const voiceCountdown = new Audio("../assets/audio/se/321voic.mp3");
+// ※もし実際のファイル名が 321voic.mp3 の場合は書き換えてください
+const voiceCountdown = new Audio("assets/audio/se/321voice.mp3");
 
-const buttonSound = new Audio("../assets/audio/se/button.mp3");
-const voteSound = new Audio("../assets/audio/se/vote.mp3");
-const answerSound = new Audio("../assets/audio/se/answer.mp3"); 
+const buttonSound = new Audio("assets/audio/se/button.mp3");
+const voteSound = new Audio("assets/audio/se/vote.mp3");
+const answerSound = new Audio("assets/audio/se/answer.mp3"); 
 
-const bgmMain = new Audio("../assets/audio/bgm/bgm_main.mp3");
+const bgmMain = new Audio("assets/audio/bgm/bgm_main.mp3");
 bgmMain.loop = true; 
 bgmMain.volume = 0;  
 
-const bgmBattle = new Audio("../assets/audio/bgm/bgm_battle.mp3");
+const bgmBattle = new Audio("assets/audio/bgm/bgm_battle.mp3");
 bgmBattle.loop = true;
 bgmBattle.volume = 0;
 
-const bgmVote = new Audio("../assets/audio/bgm/bgm_vote.mp3");
+const bgmVote = new Audio("assets/audio/bgm/bgm_vote.mp3");
 bgmVote.loop = true;
 bgmVote.volume = 0;
 
@@ -85,9 +85,9 @@ function setFixedBackground() {
     // 背景色（薄黄色）を設定
     bgContainer.style.backgroundColor = "#fffdf5"; 
     
-    // 🌟 SVGのパスを修正
+    // 🌟 SVGのパスもHTML基準に修正
     const bgImage = document.createElement("img");
-    bgImage.src = "../assets/svg/pattern.svg";
+    bgImage.src = "assets/svg/pattern.svg";
     
     // 画像のスタイル設定
     bgImage.style.position = "absolute";
