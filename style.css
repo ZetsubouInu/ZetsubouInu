@@ -554,7 +554,7 @@ select:disabled {
 /* =========================================
    📱 スマホ用レイアウト調整（横幅1080px以下）
    ========================================= */
-@media screen and (max-width: 1080px) {
+@media screen and (max-width: 1081px) {
     
     /* 1. アイコンが右にはみ出ないように折り返して小さくする */
     #home-icon-selector {
