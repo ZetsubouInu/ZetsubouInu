@@ -550,3 +550,54 @@ select:disabled {
         font-size: 18px;
     }
 }
+
+/* =========================================
+   📱 スマホ用レイアウト調整（横幅768px以下）
+   ========================================= */
+@media screen and (max-width: 768px) {
+    
+    /* 1. アイコンが右にはみ出ないように折り返して小さくする */
+    #home-icon-selector {
+        flex-wrap: wrap !important; /* 端まで行ったら折り返す */
+        justify-content: center !important;
+        gap: 8px !important; /* アイコン同士の隙間を少し狭くする */
+    }
+    
+    .icon-option {
+        width: 40px !important;  /* アイコンボタンをスマホサイズに縮小 */
+        height: 40px !important;
+        font-size: 24px !important;
+        padding: 5px !important;
+    }
+
+    /* 2. 1画面に収めるために、全体の余白と文字サイズを少し詰める */
+    body {
+        /* スマホのURLバーなどを考慮して、高さを画面ぴったりに合わせる */
+        height: 100dvh !important; 
+    }
+
+    h1 {
+        font-size: 28px !important; /* タイトルを少し小さく */
+        margin-top: 10px !important;
+        margin-bottom: 15px !important;
+    }
+
+    input[type="text"], 
+    button {
+        font-size: 16px !important; /* スマホでタップしやすい標準サイズ */
+        padding: 10px !important;
+        margin-bottom: 10px !important;
+    }
+
+    .screen {
+        padding: 15px !important; /* 画面全体の余白を狭くする */
+        gap: 10px !important;     /* 要素同士の隙間を詰める */
+    }
+
+    /* コピーライトなどのフッター部分を詰める */
+    #copyright {
+        font-size: 10px !important;
+        margin-top: auto !important; /* 下部に押しやる */
+        padding-bottom: 10px !important;
+    }
+}
