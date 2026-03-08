@@ -552,37 +552,41 @@ select:disabled {
 }
 
 /* =========================================
-   📱 スマホ用レイアウト調整（Pixel 10対応・1画面ピタッと収める）
+   📱 スマホ用レイアウト調整（Pixel 10対応・修正版）
    ========================================= */
 @media screen and (max-width: 768px) {
     /* 1. ページ全体のスクロールを強制的に禁止する */
     html, body {
-        height: 100dvh !important; /* スマホのURLバーを除いた実際の表示領域に合わせる */
+        height: 100dvh !important;
         margin: 0 !important;
         padding: 0 !important;
-        overflow: hidden !important; /* 絶対にスクロールさせない */
+        overflow: hidden !important;
     }
 
-    /* 2. 各画面のコンテナを画面内に収める */
+    /* 2. 各画面のコンテナの共通設定（※ここにdisplay:flexを入れるとバグるので外しました） */
     .screen {
         height: 100dvh !important;
+        padding: 10px !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
+        gap: 8px !important;
+    }
+
+    /* 🌟 3. 現在アクティブ（表示中）の画面だけにFlexboxを適用して整列させる */
+    .screen.active {
         display: flex !important;
         flex-direction: column !important;
         justify-content: center !important;
         align-items: center !important;
-        padding: 10px !important;
-        box-sizing: border-box !important;
-        overflow: hidden !important;
-        gap: 8px !important; /* 要素同士の隙間をギリギリまで詰める */
     }
 
-    /* 3. タイトルをコンパクトに */
+    /* 4. タイトルをコンパクトに */
     h1 {
         font-size: 24px !important;
         margin: 5px 0 10px 0 !important;
     }
 
-    /* 4. アイコンを2行に折り返して小さくする */
+    /* 5. アイコンを2行に折り返して小さくする */
     #home-icon-selector {
         display: flex !important;
         flex-wrap: wrap !important;
@@ -600,7 +604,7 @@ select:disabled {
         padding: 2px !important;
     }
 
-    /* 5. 入力欄とボタンの高さ・余白を削る */
+    /* 6. 入力欄とボタンの高さ・余白を削る */
     input[type="text"] {
         font-size: 14px !important;
         padding: 8px 10px !important;
@@ -617,10 +621,10 @@ select:disabled {
         max-width: 300px !important;
     }
 
-    /* 6. コピーライト（一番下）の調整 */
+    /* 7. コピーライト（一番下）の調整 */
     #copyright {
         font-size: 10px !important;
-        margin-top: auto !important; /* 余ったスペースをここに集めて一番下に押しやる */
+        margin-top: auto !important;
         padding-bottom: 5px !important;
     }
 }
