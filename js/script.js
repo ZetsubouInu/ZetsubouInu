@@ -15,13 +15,16 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-let roomCode = "", myName = "", myId = "", myIcon = "🐱", isHost = false, hasVoted = false, latestRoomData = null, timerInterval = null;
+// 🌟 タイマー関連の変数を完備
+let roomCode = "", myName = "", myId = "", myIcon = "🐱", isHost = false, hasVoted = false, latestRoomData = null, timerInterval = null, voteTimerInterval = null, roundResultTimerInterval = null;
 let currentLocalScreen = "home", lastKnownReactionTimes = {}, isProcessingAction = false, isViewer = false;
 
 let currentRevealingAnswerIndex = -1;
 let typeWriterTimer = null;
 let playedCountdownRounds = []; 
 let playedRevealRounds = []; 
+let playedVoteRounds = []; 
+let playedRoundResultRounds = []; 
 let revealCountdownTimer = null; 
 
 const icons = ['🐱', '🐶', '🦊', '🐈', '🐯', '🦁', '🐰', '🐻'];
@@ -31,7 +34,7 @@ const limitSound = new Audio("assets/audio/se/limit10.mp3");
 limitSound.loop = false; 
 let isLimitSoundPlayed = false;
 
-const voiceCountdown = new Audio("assets/audio/se/321voic.mp3");
+const voiceCountdown = new Audio("assets/audio/se/321voice.mp3");
 const buttonSound = new Audio("assets/audio/se/button.mp3");
 const voteSound = new Audio("assets/audio/se/vote.mp3");
 const answerSound = new Audio("assets/audio/se/answer.mp3"); 
@@ -98,7 +101,7 @@ function manageBgm(screen) {
     } else if (screen === "reveal_standby") {
         isMainBgmPlaying = false; isBattleBgmPlaying = false; isVoteBgmPlaying = false;
         fadeAudio(bgmMain, 0, 1000); fadeAudio(bgmBattle, 0, 1000); fadeAudio(bgmVote, 0, 1000);
-    } else if (["revealing", "voting"].includes(screen)) {
+    } else if (["revealing", "voting", "round_result"].includes(screen)) {
         isMainBgmPlaying = false; isBattleBgmPlaying = false; isVoteBgmPlaying = true;
         fadeAudio(bgmMain, 0, 1000); fadeAudio(bgmBattle, 0, 1000); fadeAudio(bgmVote, 1, 1000); 
     }
@@ -170,6 +173,36 @@ function startRevealCountdown(data) {
         timeLeft--;
         if (timeLeft > 0) timerEl.innerText = `（${baseText} ${timeLeft}秒）`;
         else { clearInterval(revealCountdownTimer); timerEl.style.display = "none"; if (isHost) nextReveal(); }
+    }, 1000);
+}
+
+function startVoteTimer(duration) {
+    if (voteTimerInterval) clearInterval(voteTimerInterval);
+    let time = duration;
+    voteTimerInterval = setInterval(() => {
+        time--;
+        if (isHost) {
+            updateDoc(doc(db, "rooms", roomCode), { voteTimeLeft: time });
+            if (time <= 0) {
+                clearInterval(voteTimerInterval);
+                processVoteEnd(latestRoomData);
+            }
+        }
+    }, 1000);
+}
+
+function startRoundResultTimer(duration) {
+    if (roundResultTimerInterval) clearInterval(roundResultTimerInterval);
+    let time = duration;
+    roundResultTimerInterval = setInterval(() => {
+        time--;
+        if (isHost) {
+            updateDoc(doc(db, "rooms", roomCode), { roundResultTimeLeft: time });
+            if (time <= 0) {
+                clearInterval(roundResultTimerInterval);
+                processRoundResultEnd(latestRoomData);
+            }
+        }
     }, 1000);
 }
 
@@ -262,9 +295,14 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("allow-viewers-checkbox").onchange = (e) => { updateRoomSettings('allowViewers', e.target.checked); };
     
     document.getElementById("end-vote-btn").onclick = () => { 
-        if (isProcessingAction) return; 
-        playButtonSound(); isProcessingAction = true; 
+        playButtonSound(); 
         processVoteEnd(latestRoomData); 
+    };
+
+    document.getElementById("rr-next-btn").onclick = async () => {
+        playButtonSound();
+        const newUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, isReady: true } : u);
+        await updateDoc(doc(db, "rooms", roomCode), { users: newUsers });
     };
 });
 
@@ -298,7 +336,7 @@ async function createRoom() {
     const vCode = Math.floor(100000 + Math.random() * 900000).toString();
     myName = document.getElementById("name-input").value.substring(0, 10) || "名無し";
     myId = generateId(); isHost = true; isViewer = false; currentLocalScreen = "wait";
-    playedCountdownRounds = []; playedRevealRounds = []; 
+    playedCountdownRounds = []; playedRevealRounds = []; playedVoteRounds = []; playedRoundResultRounds = []; 
 
     await setDoc(doc(db, "rooms", roomCode), {
         status: "waiting", 
@@ -344,7 +382,7 @@ async function joinRoom() {
     
     myName = document.getElementById("name-input").value.substring(0, 10) || (isViewer ? "観客" : "ゲスト");
     myId = generateId(); isHost = false; currentLocalScreen = "wait";
-    playedCountdownRounds = []; playedRevealRounds = []; 
+    playedCountdownRounds = []; playedRevealRounds = []; playedVoteRounds = []; playedRoundResultRounds = []; 
     
     if (!isViewer) {
         await updateDoc(roomRef, { users: arrayUnion({ id: myId, name: myName, icon: myIcon, isReady: false, lastReaction: "", reactionTime: 0, totalScore: 0, isExited: false }) });
@@ -365,7 +403,7 @@ function setupRoomListener() {
         
         if (latestRoomData.status === "waiting") {
             if (currentLocalScreen !== "home" && currentLocalScreen !== "result") currentLocalScreen = "wait";
-        } else if (["playing", "reveal_standby", "revealing", "voting"].includes(latestRoomData.status)) {
+        } else if (["playing", "reveal_standby", "revealing", "voting", "round_result"].includes(latestRoomData.status)) {
             currentLocalScreen = latestRoomData.status;
         } else if (latestRoomData.status === "result") {
             if (currentLocalScreen !== "home" && currentLocalScreen !== "wait") currentLocalScreen = "result";
@@ -421,11 +459,9 @@ function updateUI(data) {
         isProcessingAction = false; 
         document.getElementById("user-counter").innerText = `${activeUsers.length}/${data.maxUsers || 8}`;
         
-        // 🌟 観戦者の場合はルームコードとコピーボタンを隠す
         const roomCodeArea = document.getElementById("room-code-area");
         if (roomCodeArea) roomCodeArea.style.display = isViewer ? "none" : "block";
 
-        // 🌟 観戦者用の待機メッセージを表示
         const viewerWaitMsg = document.getElementById("viewer-wait-msg");
         if (viewerWaitMsg) viewerWaitMsg.style.display = isViewer ? "block" : "none";
 
@@ -530,31 +566,109 @@ function updateUI(data) {
             const nextBtn = document.getElementById("next-reveal-btn");
             nextBtn.innerText = (data.revealIndex >= data.answers.length - 1) ? "投票画面へ進む" : "次の回答へ";
             nextBtn.style.display = isHost ? "block" : "none";
-        } else if (isHost) updateDoc(doc(db, "rooms", roomCode), { status: "voting" });
+        } else if (isHost) {
+            updateDoc(doc(db, "rooms", roomCode), { status: "voting", voteTimeLeft: 15 });
+        }
+        
+        const revStamps = document.getElementById("revealing-stamps");
+        if (revStamps) revStamps.style.display = isViewer ? "none" : "flex";
     } 
     else if (currentLocalScreen === "voting") {
         isProcessingAction = false; 
         document.getElementById("voting-odai").innerText = `お題：${data.odai}`;
         renderVoteList(data);
         
+        const timerEl = document.getElementById("vote-timer-display");
+        if (timerEl) {
+            const timeLeft = data.voteTimeLeft !== undefined ? data.voteTimeLeft : 15;
+            timerEl.innerText = `残り ${timeLeft}秒`;
+        }
+
+        if (isHost && !playedVoteRounds.includes(data.currentRound)) {
+            playedVoteRounds.push(data.currentRound);
+            startVoteTimer(15);
+        }
+        
         const endBtn = document.getElementById("end-vote-btn");
         const progressMsg = document.getElementById("host-vote-progress");
         
         if (isHost && data.allowViewers) {
-            if (endBtn) endBtn.style.display = "inline-block";
+            if (endBtn) {
+                endBtn.style.display = "inline-block";
+                endBtn.innerText = "投票を締め切って結果へ（スキップ）";
+            }
             if (progressMsg) {
                 progressMsg.style.display = "block";
-                progressMsg.innerText = `📺 プレイヤー投票進捗: ${data.voteCount || 0} / ${activeUsers.length} 完了\n\n観客も投票中です！好きなタイミングで\n「投票を締め切る」を押してください。`;
+                progressMsg.innerText = `📺 プレイヤー投票進捗: ${data.voteCount || 0} / ${activeUsers.length} 完了\n観客も投票中です！時間経過で自動進行します。`;
             }
         } else {
             if (endBtn) endBtn.style.display = "none";
             if (progressMsg) progressMsg.style.display = "none";
-            if (isHost && data.voteCount >= activeUsers.length) processVoteEnd(data);
+            if (isHost && data.voteCount >= activeUsers.length) {
+                if (voteTimerInterval) { clearInterval(voteTimerInterval); voteTimerInterval = null; }
+                processVoteEnd(data);
+            }
         }
-    } 
-    else if (currentLocalScreen === "result") renderFinalResults(data);
+    }
+    else if (currentLocalScreen === "round_result") {
+        isProcessingAction = false;
+        document.getElementById("rr-round-num").innerText = data.currentRound;
+        document.getElementById("rr-odai").innerText = `お題：${data.odai}`;
+
+        const list = document.getElementById("rr-list");
+        const sortedAnswers = [...data.answers].sort((a, b) => b.votes - a.votes);
+        list.innerHTML = sortedAnswers.map((ans, i) => {
+            const user = data.users.find(u => u.id === ans.userId);
+            return `<div class="result-item"><strong>${i+1}位 (${ans.votes}票):</strong> ${user ? renderIcon(user.icon) : ''} ${escapeHTML(ans.userName)}<br><span style="font-size: 1.2em; display:block; margin-top:5px; margin-bottom:5px;">「${escapeHTML(ans.text)}」</span></div>`;
+        }).join("");
+
+        const timerEl = document.getElementById("rr-timer-display");
+        if (timerEl) {
+            const timeLeft = data.roundResultTimeLeft !== undefined ? data.roundResultTimeLeft : 10;
+            timerEl.innerText = `残り ${timeLeft}秒`;
+        }
+
+        if (isHost && !playedRoundResultRounds.includes(data.currentRound)) {
+            playedRoundResultRounds.push(data.currentRound);
+            startRoundResultTimer(10);
+        }
+
+        const me = data.users.find(u => u.id === myId);
+        const nextBtn = document.getElementById("rr-next-btn");
+        const waitMsg = document.getElementById("rr-wait-msg");
+        
+        if (isViewer) {
+            nextBtn.style.display = "none";
+            waitMsg.style.display = "block";
+            waitMsg.innerText = "プレイヤーが次へ進むのを待っています...";
+        } else {
+            if (me && me.isReady) {
+                nextBtn.style.display = "none";
+                waitMsg.style.display = "block";
+                waitMsg.innerText = "他のプレイヤーを待っています...";
+            } else {
+                nextBtn.style.display = "inline-block";
+                waitMsg.style.display = "none";
+            }
+        }
+
+        if (isHost) {
+            const allReady = activeUsers.every(u => u.isReady);
+            if (allReady) {
+                if (roundResultTimerInterval) { clearInterval(roundResultTimerInterval); roundResultTimerInterval = null; }
+                processRoundResultEnd(data);
+            }
+        }
+    }
+    else if (currentLocalScreen === "result") {
+        renderFinalResults(data);
+        
+        const resStamps = document.getElementById("result-stamps");
+        if (resStamps) resStamps.style.display = isViewer ? "none" : "flex";
+    }
 }
 
+// 🌟 消えていた重要関数群を復旧！
 async function updateRoomSettings(field, val) { 
     if (!isHost) return; 
     const update = {}; 
@@ -562,7 +676,12 @@ async function updateRoomSettings(field, val) {
     await updateDoc(doc(db, "rooms", roomCode), update); 
 }
 
-async function toggleReady() { playButtonSound(); const newUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, isReady: !u.isReady } : u); await updateDoc(doc(db, "rooms", roomCode), { users: newUsers }); }
+async function toggleReady() { 
+    playButtonSound(); 
+    const newUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, isReady: !u.isReady } : u); 
+    await updateDoc(doc(db, "rooms", roomCode), { users: newUsers }); 
+}
+
 async function startGame() {
     playButtonSound(); if (!isHost) return;
     const participants = latestRoomData.users.filter(u => !u.isExited).map(u => ({ ...u, isReady: false, totalScore: 0, lastReaction: "", reactionTime: 0 }));
@@ -597,21 +716,29 @@ async function goToReveal() {
     } 
 }
 
-async function nextReveal() { playButtonSound(); if (revealCountdownTimer) { clearInterval(revealCountdownTimer); revealCountdownTimer = null; } await updateDoc(doc(db, "rooms", roomCode), { revealIndex: latestRoomData.revealIndex + 1 }); }
+async function nextReveal() { 
+    playButtonSound(); 
+    if (revealCountdownTimer) { clearInterval(revealCountdownTimer); revealCountdownTimer = null; } 
+    await updateDoc(doc(db, "rooms", roomCode), { revealIndex: latestRoomData.revealIndex + 1 }); 
+}
+// 🌟 復旧ここまで！
 
 function renderVoteList(data) {
-    const list = document.getElementById("vote-list"); list.innerHTML = ""; const activeUsers = data.users.filter(u => !u.isExited);
-    const others = data.answers.filter(a => a.userId !== myId && activeUsers.some(u => u.id === a.userId));
+    const list = document.getElementById("vote-list"); list.innerHTML = ""; 
+    const activeUsers = data.users.filter(u => !u.isExited);
     
-    if (others.length === 0 || hasVoted) { 
-        if (!hasVoted && others.length === 0) { 
+    const votableAnswers = data.answers.filter(a => activeUsers.some(u => u.id === a.userId));
+    
+    if (votableAnswers.length === 0 || hasVoted) { 
+        if (!hasVoted && votableAnswers.length === 0) { 
             hasVoted = true; 
             if(!isViewer) updateDoc(doc(db, "rooms", roomCode), { voteCount: data.voteCount + 1 }); 
         } 
         document.getElementById("vote-wait-msg").style.display = "block"; return; 
     }
     document.getElementById("vote-wait-msg").style.display = "none";
-    others.forEach(ans => {
+    
+    votableAnswers.forEach(ans => {
         const btn = document.createElement("button"); btn.className = "vote-item"; btn.innerText = ans.text;
         btn.onclick = async () => { 
             if (isProcessingAction) return; 
@@ -623,6 +750,43 @@ function renderVoteList(data) {
         };
         list.appendChild(btn);
     });
+}
+
+let isEndingVote = false;
+async function processVoteEnd(data) {
+    if (!isHost || isEndingVote) return;
+    isEndingVote = true;
+    if (voteTimerInterval) { clearInterval(voteTimerInterval); voteTimerInterval = null; }
+    
+    const updatedUsers = data.users.map(u => { const ans = data.answers.find(a => a.userId === u.id); return { ...u, totalScore: (u.totalScore || 0) + (ans ? ans.votes : 0), isReady: false }; });
+    const updatedHistory = [...(data.allAnswersHistory || []), ...data.answers.map(a => ({...a, odai: data.odai}))];
+    
+    if (data.totalRounds === 1) {
+        await updateDoc(doc(db, "rooms", roomCode), { status: "result", users: updatedUsers, allAnswersHistory: updatedHistory });
+    } else {
+        await updateDoc(doc(db, "rooms", roomCode), { status: "round_result", users: updatedUsers, allAnswersHistory: updatedHistory, roundResultTimeLeft: 10 });
+    }
+    
+    setTimeout(() => { isEndingVote = false; }, 2000); 
+}
+
+let isEndingRoundResult = false;
+async function processRoundResultEnd(data) {
+    if (!isHost || isEndingRoundResult) return;
+    isEndingRoundResult = true;
+    if (roundResultTimerInterval) { clearInterval(roundResultTimerInterval); roundResultTimerInterval = null; }
+
+    const updatedUsers = data.users.map(u => ({ ...u, isReady: false, lastReaction: "", reactionTime: 0 }));
+
+    if (data.currentRound < data.totalRounds) {
+        const nextOdai = pickUniqueOdai(data.usedOdaiIndices || []);
+        await updateDoc(doc(db, "rooms", roomCode), { status: "playing", users: updatedUsers, currentRound: data.currentRound + 1, answers: [], revealIndex: 0, voteCount: 0, timeLeft: data.timeLimit, odai: nextOdai.text, usedOdaiIndices: nextOdai.newUsedIndices, voteTimeLeft: 15 });
+        setTimeout(() => { if (isHost && latestRoomData.status === "playing") startTimer(data.timeLimit); }, 4000);
+    } else {
+        await updateDoc(doc(db, "rooms", roomCode), { status: "result", users: updatedUsers });
+    }
+
+    setTimeout(() => { isEndingRoundResult = false; }, 2000);
 }
 
 function renderFinalResults(data) {
@@ -641,17 +805,6 @@ function renderFinalResults(data) {
     } else document.getElementById("mvp-area").style.display = "none";
 }
 
-async function processVoteEnd(data) {
-    if (!isHost) return;
-    const updatedUsers = data.users.map(u => { const ans = data.answers.find(a => a.userId === u.id); return { ...u, totalScore: (u.totalScore || 0) + (ans ? ans.votes : 0) }; });
-    const updatedHistory = [...(data.allAnswersHistory || []), ...data.answers.map(a => ({...a, odai: data.odai}))];
-    if (data.currentRound < data.totalRounds) {
-        const nextOdai = pickUniqueOdai(data.usedOdaiIndices || []);
-        await updateDoc(doc(db, "rooms", roomCode), { status: "playing", users: updatedUsers, currentRound: data.currentRound + 1, answers: [], revealIndex: 0, voteCount: 0, timeLeft: data.timeLimit, odai: nextOdai.text, usedOdaiIndices: nextOdai.newUsedIndices, allAnswersHistory: updatedHistory });
-        setTimeout(() => { if (isHost && latestRoomData.status === "playing") startTimer(data.timeLimit); }, 4000);
-    } else await updateDoc(doc(db, "rooms", roomCode), { status: "result", users: updatedUsers, allAnswersHistory: updatedHistory });
-}
-
 function shareToX() {
     playButtonSound();
     const mvpAnswer = document.getElementById("mvp-answer").innerText, mvpOdai = document.getElementById("mvp-odai").innerText;
@@ -660,7 +813,7 @@ function shareToX() {
 }
 
 async function goBackToWait() { 
-    playButtonSound(); currentLocalScreen = "wait"; playedCountdownRounds = []; playedRevealRounds = []; isCountdownActive = false; updateUI(latestRoomData); 
+    playButtonSound(); currentLocalScreen = "wait"; playedCountdownRounds = []; playedRevealRounds = []; playedVoteRounds = []; playedRoundResultRounds = []; isCountdownActive = false; updateUI(latestRoomData); 
     if (!isViewer) {
         const updatedUsers = latestRoomData.users.map(u => u.id === myId ? { ...u, isReady: false, isExited: false, lastReaction: "", reactionTime: 0 } : u);
         const updateData = { users: updatedUsers }; if (isHost) updateData.status = "waiting";
@@ -694,5 +847,23 @@ async function sendStamp(type) {
     await updateDoc(doc(db, "rooms", roomCode), updateFields);
 }
 
-function copyRoomCode() { if (!roomCode) return; navigator.clipboard.writeText(roomCode).then(() => { const toast = document.getElementById("copy-toast"); toast.className = "show"; setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 2000); }); }
-function toggleRoomCode() { const display = document.getElementById("display-code"); display.innerText = (display.innerText === "*****") ? roomCode : "*****"; }
+// 🌟 伏せ字（*****）のままでも正しくルームコードがコピーできる仕様に戻しました
+function copyRoomCode() { 
+    if (!roomCode) return; 
+    const codeStr = String(roomCode);
+    navigator.clipboard.writeText(codeStr).then(() => { 
+        const toast = document.getElementById("copy-toast"); 
+        if(toast) {
+            toast.innerText = "コピー完了";
+            toast.className = "show"; 
+            setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 2000); 
+        }
+    }).catch(err => console.error("Clipboard Error:", err)); 
+}
+
+function toggleRoomCode() { 
+    const display = document.getElementById("display-code"); 
+    if(!display) return;
+    const codeStr = String(roomCode);
+    display.innerText = (display.innerText === "*****") ? codeStr : "*****"; 
+}

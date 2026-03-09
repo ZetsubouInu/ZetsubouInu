@@ -138,6 +138,7 @@
 
     <div id="screen-voting" class="screen">
         <h1>投票！</h1>
+        <div id="vote-timer-display" style="text-align: center; font-size: 24px; font-weight: bold; color: #d35400; margin-bottom: 15px;">残り 15秒</div>
         <div id="voting-odai" class="sub-odai-box"></div>
         
         <p id="host-vote-progress" style="display:none; font-weight:bold; color:#d35400; background: #fffbe6; padding: 10px; border-radius: 10px; white-space: pre-wrap;"></p>
@@ -147,6 +148,15 @@
         <p id="vote-wait-msg" style="display:none;">全員の投票を待っています...</p>
         
         <button id="end-vote-btn" class="next-btn" style="display:none; margin-top: 20px; background: #ff4d4d; color: white;">投票を締め切って結果へ</button>
+    </div>
+
+    <div id="screen-round_result" class="screen">
+        <h1>第<span id="rr-round-num"></span>ラウンド 結果発表</h1>
+        <div id="rr-timer-display" style="text-align: center; font-size: 24px; font-weight: bold; color: #d35400; margin-bottom: 15px;">残り 10秒</div>
+        <div id="rr-odai" class="sub-odai-box"></div>
+        <div id="rr-list"></div>
+        <button id="rr-next-btn" class="next-btn" style="margin-top: 20px;">次に進む</button>
+        <p id="rr-wait-msg" style="display:none; font-weight: bold; color: #666; margin-top: 20px;">他の人を待っています...</p>
     </div>
 
     <div id="screen-result" class="screen">
