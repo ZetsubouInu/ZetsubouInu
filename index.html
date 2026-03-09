@@ -48,7 +48,7 @@
         <div class="icon-selector" id="home-icon-selector"></div>
         <button id="create-room-btn">新しい部屋を作る</button>
         <hr style="border: 0; border-top: 2px solid #eee; margin: 30px 0;">
-        <input type="text" id="room-input" placeholder="5桁のコードを入力">
+        <input type="text" id="room-input" placeholder="ルームコードを入力">
         <button id="join-room-btn">部屋に入る</button>
         
         <div class="footer-text">
@@ -64,8 +64,13 @@
         <h1>待機室</h1>
         <p id="host-msg" style="display:none; color: #ff4d4d; font-weight: bold; margin-top: -10px;">👑 あなたがホストです</p>
         
-        <p>ルームコード: <span id="display-code" style="font-size: 24px; font-weight: bold; cursor: pointer; background: #eee; padding: 2px 10px; border-radius: 5px;">*****</span>
+        <p id="viewer-wait-msg" style="display:none; font-weight: bold; color: #d35400; background: #fffbe6; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+            ここは観戦者モードの待機所です。<br>ホストがゲームを開始するまでお待ちください。
+        </p>
+
+        <p id="room-code-area">ルームコード: <span id="display-code" style="font-size: 24px; font-weight: bold; cursor: pointer; background: #eee; padding: 2px 10px; border-radius: 5px;">*****</span>
         <button id="copy-btn" class="copy-btn">コピー</button></p>
+        
         <div style="font-weight: bold; margin-bottom: 10px; text-align: right;">参加中：<span id="user-counter">0/8</span></div>
         <div class="user-list" id="user-list"></div>
         <div style="margin-top: 20px;">
@@ -76,6 +81,7 @@
         <div id="room-settings-area" style="display:none; margin-top: 20px; border-top: 2px solid #eee; padding-top: 20px;">
             <p id="settings-title" style="font-weight: bold; margin-bottom: 5px;">ルーム設定</p>
             <p id="guest-msg" style="display:none; color: #ff4d4d; font-size: 14px; margin-top: 0; margin-bottom: 15px;">※設定はホストのみ変更できます</p>
+            
             <label style="font-weight: bold;">最大参加人数 (2〜8人):</label><br>
             <select id="max-users-select">
                 <option value="2">2人</option><option value="3">3人</option><option value="4">4人</option><option value="5">5人</option><option value="6">6人</option><option value="7">7人</option><option value="8" selected>8人</option>
@@ -85,8 +91,22 @@
                 <option value="30">30秒</option><option value="60" selected>60秒</option><option value="120">120秒</option>
             </select><br>
             <label style="font-weight: bold;">お題の数 (1〜10問):</label><br>
-            <select id="round-select"></select>
-            <p id="start-condition-msg" style="color:#1a1a1a; font-size: 14px; margin-top: 10px;">全員が準備完了になると開始できます</p>
+            <select id="round-select"></select><br><br>
+
+            <div id="streamer-settings-area" style="display:none;">
+                <label style="font-weight: bold; color: #d35400;">📺 配信者・企画向け機能</label><br>
+                <div style="background: rgba(255,215,0,0.2); padding: 15px; border-radius: 10px; margin-top: 5px; text-align: center;">
+                    <label style="font-weight: bold; cursor: pointer;">
+                        <input type="checkbox" id="allow-viewers-checkbox" style="width:auto; margin:0; transform: scale(1.2);"> 投票所（観戦モード）をオンにする
+                    </label>
+                    <div id="viewer-code-display" style="display:none; margin-top: 15px;">
+                        <span style="font-size: 14px; color: #666;">リスナーに教える専用コード</span><br>
+                        <span id="v-code" style="font-size: 32px; font-weight: bold; background: #fff; padding: 5px 20px; border-radius: 10px; border: 2px solid #1a1a1a; display: inline-block; margin-top: 5px; letter-spacing: 2px;"></span>
+                    </div>
+                </div>
+            </div>
+
+            <p id="start-condition-msg" style="color:#1a1a1a; font-size: 14px; margin-top: 15px;">全員が準備完了になると開始できます</p>
         </div>
     </div>
 
@@ -119,9 +139,14 @@
     <div id="screen-voting" class="screen">
         <h1>投票！</h1>
         <div id="voting-odai" class="sub-odai-box"></div>
+        
+        <p id="host-vote-progress" style="display:none; font-weight:bold; color:#d35400; background: #fffbe6; padding: 10px; border-radius: 10px; white-space: pre-wrap;"></p>
+        
         <p>一番面白いと思った回答を選んでください</p>
         <div id="vote-list"></div>
         <p id="vote-wait-msg" style="display:none;">全員の投票を待っています...</p>
+        
+        <button id="end-vote-btn" class="next-btn" style="display:none; margin-top: 20px; background: #ff4d4d; color: white;">投票を締め切って結果へ</button>
     </div>
 
     <div id="screen-result" class="screen">
